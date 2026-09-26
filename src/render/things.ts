@@ -40,6 +40,23 @@ export function drawThings(sh: Shapes, spr: Spr, g: Game, cam: Camera, P: Palett
   const lit = litOf(P), n = P.night;
   const RIM = rimOf(P), RIM2 = rimOf(P, 0.5);
   const INK = solid(0.012 + P.amb[0] * 0.03, 0.014 + P.amb[1] * 0.03, 0.02 + P.amb[2] * 0.035);
+  // a level's finish line: a row of floats up the face and a flag over the crest
+  const fx = g.finishX;
+  if (fx && fx > x0 && fx < x1) {
+    const H = g.wave.H(fx);
+    for (let i = 0; i <= 8; i++) {
+      const fy = (i / 8) * H + Math.sin(time * 2 + i) * 2;
+      sh.disk(fx, fy, 6 + 2 * px, RIM2, 10);
+      sh.disk(fx, fy, 6, i % 2 ? solid(1 * lit + 0.1, 0.5 * lit + 0.05, 0.1) : solid(0.95 * lit + 0.1, 0.95 * lit + 0.1, 0.9 * lit + 0.1), 10);
+    }
+    const top = H + 0.35 * H;
+    sh.line(fx, H, fx, top, 2.5 * px, INK);
+    const wv = Math.sin(time * 4) * 4;
+    for (let r2 = 0; r2 < 3; r2++) for (let c2 = 0; c2 < 5; c2++) {
+      const qx = fx + c2 * 9, qy = top - (r2 * 9) / e, dy = (Math.sin(time * 4 + c2 * 0.8) * 3 + wv * 0.2) / e;
+      sh.quad(qx, qy + dy, qx + 9, qy + dy, qx + 9, qy - 9 / e + dy, qx, qy - 9 / e + dy, (r2 + c2) % 2 ? INK : solid(0.95, 0.95, 0.92));
+    }
+  }
   for (const t of g.things.list) {
     if (t.x < x0 || t.x > x1) continue;
     const r = t.kind in T.r ? T.r[t.kind as keyof typeof T.r] : 20;
@@ -66,6 +83,26 @@ export function drawThings(sh: Shapes, spr: Spr, g: Game, cam: Camera, P: Palett
         sh.taper(x - hx, y - hy, x + hx, y + hy, r * 1.2, r * 1.1, solid(0.12 * lit + 0.02, 0.07 * lit + 0.015, 0.035 * lit + 0.01));
         sh.line(x - hx * 0.8, y - hy * 0.8 + (r * 0.15) / e, x + hx * 0.6, y + hy * 0.6 + (r * 0.15) / e, 1.2 * px, solid(0.2 * lit + 0.03, 0.13 * lit + 0.02, 0.07 * lit + 0.01, 0.8));
         sh.disk(x + hx, y + hy, r * 0.5, solid(0.3 * lit + 0.05, 0.22 * lit + 0.04, 0.12 * lit + 0.02), 10);
+        break;
+      }
+      case 'ice': {
+        // an ice floe: pale, angular, a little translucent
+        const a = 0.2 * Math.sin(t.phase + t.age * 0.9);
+        const pts: [number, number][] = [];
+        for (let i = 0; i < 6; i++) {
+          const q = (i / 6) * Math.PI * 2 + a;
+          const j = 0.7 + 0.45 * Math.abs(Math.sin(t.phase * 7.1 + i * 2.3));
+          pts.push([x + Math.cos(q) * r * 1.5 * j, y + (Math.sin(q) * r * 0.8 * j) / e]);
+        }
+        const fan = (c: Col, g2: number) => {
+          for (let i = 0; i < 6; i++) {
+            const p0 = pts[i], p1 = pts[(i + 1) % 6];
+            sh.tri(x, y, p0[0] + Math.sign(p0[0] - x) * g2, p0[1] + (Math.sign(p0[1] - y) * g2) / e, p1[0] + Math.sign(p1[0] - x) * g2, p1[1] + (Math.sign(p1[1] - y) * g2) / e, c);
+          }
+        };
+        fan(RIM2, 2 * px);
+        fan(solid(0.55 * lit + 0.12, 0.7 * lit + 0.16, 0.8 * lit + 0.2, 0.92), 0);
+        sh.line(pts[4][0], pts[4][1], pts[5][0], pts[5][1], 2 * px, solid(0.9 * lit + 0.2, 0.95 * lit + 0.2, 1 * lit + 0.2));
         break;
       }
       case 'buoy': {

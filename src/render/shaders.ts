@@ -70,6 +70,12 @@ uniform vec3 u_sun;       // screen x, height above the horizon (fraction of scr
 uniform vec3 u_moon;
 uniform float u_backX;    // screen x of the light behind the wave
 uniform float u_night;
+// the spot: extra cloud cover, land on the horizon (height, roughness, from, to), its peak, aurora, reef
+uniform float u_clouds;
+uniform vec4 u_land;
+uniform float u_landPeak;
+uniform float u_aurora;
+uniform float u_reef;
 out vec4 o;
 
 float asp, hzUv, pxY;
@@ -112,14 +118,34 @@ vec3 sky(vec2 uv){
     st *= .55 + .45 * sin(u_time * (1.5 + h * 4.) + h * 40.);
     c += vec3(.75, .82, 1.) * st * u_night * smoothstep(.02, .15, e) * (1. - lit) * 1.6;
   }
-  // clouds: stretched bands, drifting with the ride
-  float band = smoothstep(.03, .14, e) * (1. - smoothstep(.55, 1., e));
+  // aurora: slow green curtains over the night sky
+  if (u_aurora * u_night > .01) {
+    float ax = uv.x * asp * 2.2 + u_time * .015;
+    float f = vnoise(vec2(ax, u_time * .05)) * .7 + vnoise(vec2(ax * 3.1, u_time * .08)) * .3;
+    float curtain = smoothstep(.45, .85, f) * exp(-sq((e - .42 - .12 * f) * 4.)) ;
+    c += mix(vec3(.05, .9, .45), vec3(.5, .15, .7), smoothstep(.3, .75, e)) * curtain * u_aurora * u_night * .9;
+  }
+  // clouds: stretched bands, drifting with the ride (a stormy spot has more, and greyer)
+  float band = smoothstep(.03, .14, e) * (1. - smoothstep(.55 + .3 * u_clouds, 1.2, e));
   if (band > 0.) {
     vec2 cp = vec2((uv.x * asp + u_view.x * 1.4e-5) * 1.3 + u_time * .004, e * 6.5);
     float n = fbm(cp);
-    float cl = smoothstep(.56, .8, n) * band;
-    vec3 cc = u_cloud * (.5 + .55 * exp(-r * 2.2)) * mix(1., .72, smoothstep(.62, .85, n));
-    c = mix(c, cc, cl * .88);
+    float cl = smoothstep(.56 - .22 * u_clouds, .8 - .15 * u_clouds, n) * band;
+    vec3 cc = u_cloud * (.5 + .55 * exp(-r * 2.2)) * mix(1., .72, smoothstep(.62, .85, n)) * (1. - .45 * u_clouds);
+    c = mix(c, cc, cl * (.88 + .1 * u_clouds));
+  }
+  // land far away on the horizon: a silhouette in the haze
+  if (u_land.x > 0. && e < u_land.x && uv.x > u_land.z - .1 && uv.x < u_land.w + .1) {
+    float x = uv.x;
+    float edge = smoothstep(u_land.z - .1, u_land.z + .05, x) * (1. - smoothstep(u_land.w - .05, u_land.w + .1, x));
+    float peak = exp(-sq((x - u_landPeak) * 3.5));
+    float n = vnoise(vec2(x * asp * 9., 1.7)) * .6 + vnoise(vec2(x * asp * 27., 4.1)) * .4;
+    float hl = u_land.x * edge * (.35 + .65 * peak) * (1. - u_land.y * .5 + u_land.y * n);
+    if (e < hl) {
+      vec3 lc = mix(u_hor * .55, u_top * .45 + u_deep, .45);
+      lc = mix(lc, u_hor, .35 * (1. - e / max(hl, 1e-3)));
+      c = mix(c, lc, smoothstep(0., pxY / u_view.w * 1.5, hl - e));
+    }
   }
   return c;
 }
@@ -210,7 +236,13 @@ vec3 waterPlane(vec2 wp, vec2 uv){
     float md = sq((rx - u_moon.x) * asp) + sq(e - u_moon.y);
     refl += vec3(.8, .85, .95) * u_moon.z * exp(-md * 1200.) * 2.;
   }
-  vec3 c = mix(u_deep * (.5 + .6 * u_amb) + u_scat * u_amb * .1, refl, fr);
+  vec3 body = u_deep * (.5 + .6 * u_amb) + u_scat * u_amb * .1;
+  if (u_reef > 0. && z < u_d0) {
+    // a shallow reef showing through the water in front of the wave
+    float rn = vnoise(P * vec2(.012, .006)) * .65 + vnoise(P * vec2(.04, .02)) * .35;
+    body = mix(body, vec3(.05, .07, .035) * (.4 + u_amb) + u_scat * u_amb * .25, smoothstep(.48, .7, rn) * u_reef * .8);
+  }
+  vec3 c = mix(body, refl, fr);
   // haze towards the horizon
   return mix(c, u_hor, (1. - exp(-max(z - u_d0, 0.) / (u_d0 * 6.))) * .8);
 }

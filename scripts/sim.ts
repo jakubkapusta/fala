@@ -6,7 +6,8 @@
 //   npm run sim -- --pump                 # steady speed of pumping rhythms vs mashing / no input
 //   BAL='{"surf":{"push":300}}' npm run sim   # try knob values from src/game/balance.ts
 
-import { BAL, tuneBal } from '../src/game/balance';
+import { BAL, resetBal, tuneBal } from '../src/game/balance';
+import { SPOTS, goalMet, goalText, spotById } from '../src/game/spots';
 import { Game } from '../src/game/game';
 import { makeRng } from '../src/core/rng';
 import { Bot } from '../src/sim/bot';
@@ -19,7 +20,11 @@ function arg(name: string, def: string) {
   return i >= 0 ? process.argv[i + 1] : def;
 }
 
-if (process.env.BAL) tuneBal(JSON.parse(process.env.BAL));
+const envBal = process.env.BAL ? JSON.parse(process.env.BAL) : null;
+if (envBal) tuneBal(envBal);
+// --spot bali: endless rides with that spot's character
+const spotArg = (() => { const i = process.argv.indexOf('--spot'); return i >= 0 ? process.argv[i + 1] : ''; })();
+if (spotArg) { resetBal(); tuneBal(spotById(spotArg).bal); if (envBal) tuneBal(envBal); }
 
 type Ride = {
   skill: number; time: number; meters: number; score: number; wipes: number; airs: number; tricks: number; perfects: number;
@@ -146,10 +151,48 @@ function pumpReport() {
   }
 }
 
+/** Levels: finish rate, time, and how often each goal (star) is met, per skill. */
+function levelReport(runs: number, only: string) {
+  const skills = [0.3, 0.6, 0.9];
+  console.log(`levels, ${runs} rides per skill (${skills.join(' / ')}): finish %, mean time of finished rides, then each goal: % of all rides that earn it\n`);
+  for (const spot of SPOTS) {
+    if (only && spot.id !== only) continue;
+    spot.levels.forEach((L, li) => {
+      resetBal();
+      tuneBal(spot.bal);
+      tuneBal(L.bal);
+      if (envBal) tuneBal(envBal);
+      const cols: string[] = [];
+      const goalHits = L.goals.map(() => skills.map(() => 0));
+      for (const [si, skill] of skills.entries()) {
+        let fin = 0, tsum = 0;
+        for (let i = 0; i < runs; i++) {
+          const g = new Game(L.seed, L.meters);
+          const bot = new Bot(skill, makeRng(L.seed ^ (i * 7919 + 13)));
+          for (let t = 0; t < 400 * BAL.tempo && g.mode !== 'gone' && g.mode !== 'done'; t += DT) {
+            g.update(DT, bot.step(g, DT));
+            g.events.length = 0;
+          }
+          if (g.mode === 'done') {
+            fin++;
+            tsum += g.time / BAL.tempo;
+            L.goals.forEach((q, gi) => { if (goalMet(q, g)) goalHits[gi][si]++; });
+          }
+        }
+        cols.push(`${String(Math.round((100 * fin) / runs)).padStart(3)}% ${fin ? (tsum / fin).toFixed(0).padStart(3) : '  –'}s`);
+      }
+      const goals = L.goals.map((q, gi) => `${goalText(q)} ${goalHits[gi].map((h) => Math.round((100 * h) / runs)).join('/')}`).join(' · ');
+      console.log(`${spot.id.padEnd(8)} ${li === 5 ? 'B' : li + 1}  ${L.meters}m  ${cols.join('  ')}  | ${goals}`);
+    });
+  }
+}
+
 const runs = Number(arg('runs', '120'));
 const trace = arg('trace', '');
 const skillArg = arg('skill', '');
-if (process.argv.includes('--pump')) {
+if (process.argv.includes('--levels')) {
+  levelReport(Number(arg('runs', '30')), spotArg);
+} else if (process.argv.includes('--pump')) {
   pumpReport();
 } else if (trace) {
   const r = ride(Number(trace), Number(skillArg || 0.5), true);

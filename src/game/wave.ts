@@ -9,6 +9,7 @@ import { clamp, smoothstep } from '../core/math';
 export type SectionKind = 'open' | 'flat' | 'close' | 'steep' | 'tube';
 export type Section = { kind: SectionKind; x0: number; x1: number; H: number; vb: number; power: number };
 
+const SCRIPT: Record<string, SectionKind> = { o: 'open', f: 'flat', c: 'close', s: 'steep', t: 'tube' };
 const AHEAD = 9000; // generate this far ahead of the break
 const KEEP = 4000; // keep this much behind it
 
@@ -31,7 +32,7 @@ export class Wave {
 
   /** 0..1 difficulty for a position (by how far the break has travelled). */
   difficulty(x: number) {
-    return clamp(x / BAL.wave.rampLen, 0, 1);
+    return clamp(BAL.wave.diffStart + x / BAL.wave.rampLen, 0, 1);
   }
 
   private ensure(x: number) {
@@ -42,7 +43,9 @@ export class Wave {
     const W = BAL.wave, r = this.rng;
     const d = this.difficulty(this.genX);
     let kind: SectionKind = 'open';
-    if (this.made >= W.warmup) {
+    const script = W.script.replace(/\s/g, '');
+    if (this.made < script.length) kind = SCRIPT[script[this.made]] ?? 'open';
+    else if (this.made >= W.warmup) {
       const prev = this.sections[this.sections.length - 1];
       let sinceClose = Infinity;
       for (let i = this.sections.length - 1; i >= 0; i--) {

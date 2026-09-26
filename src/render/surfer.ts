@@ -36,7 +36,7 @@ const FIN = [-0.47, -0.078, -0.35, -0.086, -0.45, -0.18];
 /** What the figure needs to know: the player's Game, or another surfer on the wave. */
 export type Pose = Pick<Game, 'x' | 'y' | 'board' | 'mode' | 'crouch' | 'modeT'>;
 
-export function drawSurfer(sh: Shapes, g: Pose, cam: Camera, P: Palette, time: number, lightX: number, deckCol: [number, number, number] = [0.86, 0.74, 0.55]) {
+export function drawSurfer(sh: Shapes, g: Pose, cam: Camera, P: Palette, time: number, lightX: number, deckCol: [number, number, number] = [0.86, 0.74, 0.55], boardLen = 1, suit: [number, number, number] = [0.012, 0.014, 0.02]) {
   const px = 1 / cam.scale;
   const S = Math.max(40, BAL.cam.minSurferPx * px); // figure height in x-units
   const e = cam.ey;
@@ -102,7 +102,7 @@ export function drawSurfer(sh: Shapes, g: Pose, cam: Camera, P: Palette, time: n
   const polyW = (pts: number[], dx: number, dy: number) => {
     const out: number[] = [];
     for (let i = 0; i < pts.length; i += 2) {
-      const w = toW(0, [pts[i], pts[i + 1]]);
+      const w = toW(0, [pts[i] * boardLen, pts[i + 1]]);
       out.push(w[0] + dx, w[1] + dy);
     }
     return out;
@@ -119,7 +119,7 @@ export function drawSurfer(sh: Shapes, g: Pose, cam: Camera, P: Palette, time: n
   lx /= ll; ly /= ll;
   const rim = S * 0.05;
   const lum = P.amb[0] * 0.3 + P.amb[1] * 0.5 + P.amb[2] * 0.2;
-  const INK = solid(0.01 + P.amb[0] * 0.02, 0.012 + P.amb[1] * 0.02, 0.018 + P.amb[2] * 0.025);
+  const INK = solid(suit[0] + P.amb[0] * 0.02, suit[1] + P.amb[1] * 0.02, suit[2] + P.amb[2] * 0.025);
   const lit = 0.3 + 0.7 * Math.min(1, lum);
   const DECK = solid(deckCol[0] * lit, deckCol[1] * lit, deckCol[2] * lit);
   const RAIL = solid(0.5 * lit, 0.4 * lit, 0.3 * lit);

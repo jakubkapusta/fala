@@ -9,9 +9,12 @@ import { Game, type GameEvent, type WipeCause } from './game/game';
 import type { ThingKind } from './game/things';
 import { Camera } from './game/camera';
 import { Input } from './game/input';
-import { BAL, tuneBal } from './game/balance';
+import { BAL, resetBal, tuneBal } from './game/balance';
 import { hintSeen, loadMeta, loadStats, logRide, markHint, saveMeta, today } from './game/save';
-import { Ui } from './ui/ui';
+import { Ui, type RideInfo } from './ui/ui';
+import { SPOTS, spotById, type Spot } from './game/spots';
+import { buy, daily, levelUnlocked, recordLevel, spotRec } from './game/progress';
+import { boardById, suitById, trailById } from './game/boards';
 import { Bot } from './sim/bot';
 import { applyTest, cleanTest, testLabel } from './game/tuning';
 import { makeRng } from './core/rng';
@@ -23,8 +26,9 @@ type Mode = 'menu' | 'play' | 'pause' | 'end';
 // #bal={"surf":{"push":200}} tunes knobs in the browser; #debug shows the numbers
 const hash = decodeURIComponent(location.hash.slice(1));
 const balMatch = /bal=(\{.*\})/.exec(hash);
+let urlBal: Record<string, unknown> | null = null;
 if (balMatch) {
-  try { tuneBal(JSON.parse(balMatch[1])); } catch { console.warn('bad #bal JSON'); }
+  try { urlBal = JSON.parse(balMatch[1]); } catch { console.warn('bad #bal JSON'); }
 }
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -42,7 +46,21 @@ sound.enabled = meta.sound;
 // browsers only let audio start from a user gesture
 for (const ev of ['pointerdown', 'keydown', 'touchend'] as const) window.addEventListener(ev, () => sound.start(), { passive: true });
 let test = cleanTest(meta.test);
-applyTest(test);
+
+/** the ride being played (or shown behind the menu) */
+let ride: RideInfo = { kind: 'endless', spot: spotById(meta.lastSpot) };
+/** BAL = defaults → M1 test presets → #bal → spot → level → board */
+function layers(r: RideInfo) {
+  resetBal();
+  applyTest(test);
+  if (urlBal) tuneBal(urlBal);
+  tuneBal(r.spot.bal);
+  if (r.kind === 'level') tuneBal(r.spot.levels[r.li].bal);
+  tuneBal(boardById(meta.board).bal);
+  renderer.look = r.spot.look;
+  renderer.gear = { board: boardById(meta.board), suit: suitById(meta.suit), trail: trailById(meta.trail) };
+}
+layers(ride);
 const camera = new Camera();
 let mode: Mode = 'menu';
 let game: Game;
@@ -67,17 +85,16 @@ const todMatch = /tod=([a-z.0-9]+)/.exec(hash);
 if (todMatch) todFixed = todMatch[1] in PHASES ? PHASES[todMatch[1] as keyof typeof PHASES] : parseFloat(todMatch[1]) || 0;
 
 const ui = new Ui({
-  start: (seed?: number) => startRide(undefined, seed),
-  watch: () => startRide(0.92),
+  watch: () => { ride = { kind: 'endless', spot: ride.spot }; startRide(0.92); },
   resume: () => resume(),
   menu: () => toMenu(),
   pause: () => pause(),
   setTest: (key, id) => {
     test = cleanTest({ ...test, [key]: id });
-    applyTest(test);
     meta.test = test;
     saveMeta(meta);
-    ui.showMenu(meta.best, test);
+    layers(ride);
+    ui.showMenu(test);
   },
   toggleSound: () => {
     meta.sound = !meta.sound;
@@ -85,7 +102,42 @@ const ui = new Ui({
     sound.setEnabled(meta.sound);
     ui.setSound(meta.sound);
   },
+  pickSpot: (id) => {
+    if (meta.lastSpot === id) return;
+    meta.lastSpot = id;
+    saveMeta(meta);
+    ride = { kind: 'endless', spot: spotById(id) };
+    newDemo();
+  },
+  playLevel: (id, li) => { ride = { kind: 'level', spot: spotById(id), li }; startRide(); },
+  playEndless: (id) => { ride = { kind: 'endless', spot: spotById(id) }; startRide(); },
+  playDaily: () => {
+    const d = daily(meta);
+    ride = { kind: 'daily', spot: d.spot, counted: d.counted };
+    startRide(undefined, d.seed);
+  },
+  again: () => again(),
+  next: () => {
+    if (ride.kind !== 'level') return again();
+    const li = ride.li + 1;
+    if (li < ride.spot.levels.length && levelUnlocked(meta, ride.spot, li)) { ride = { kind: 'level', spot: ride.spot, li }; startRide(); }
+    else ui.showLevels(ride.spot.id);
+  },
+  buy: (id, price) => {
+    const ok = buy(meta, id, price);
+    if (ok) saveMeta(meta);
+    return ok;
+  },
+  equip: (kind, id) => {
+    if (!meta.owned.includes(id)) return;
+    if (kind === 'board') meta.board = id;
+    else if (kind === 'suit') meta.suit = id;
+    else meta.trail = id;
+    saveMeta(meta);
+    layers(ride);
+  },
 });
+ui.meta = meta;
 ui.sound = meta.sound;
 ui.touch = matchMedia('(pointer: coarse)').matches;
 ui.showDebug = /debug/.test(hash) || !!balMatch;
@@ -98,11 +150,22 @@ const input = new Input(canvas, {
 });
 
 function newDemo() {
+  layers(ride);
   game = new Game((Date.now() & 0xffff) + 1);
   demo = new Bot(0.85, makeRng(game.seed));
-  dayStart = makeRng(game.seed ^ 0xda7)();
+  const day = ride.spot.day;
+  dayStart = typeof day === 'number' ? day : makeRng(game.seed ^ 0xda7)();
   dayClock = 0;
   camera.update(game, canvas.clientWidth, canvas.clientHeight, 0, true);
+}
+
+/** The same kind of ride again (a level keeps its seed, the daily wave too). */
+function again() {
+  if (ride.kind === 'daily') {
+    const d = daily(meta);
+    ride = { kind: 'daily', spot: d.spot, counted: d.counted };
+    startRide(undefined, d.seed);
+  } else startRide();
 }
 
 let watching = false;
@@ -112,8 +175,10 @@ function startRide(botSkill?: number, fixedSeed?: number) {
     meta.runs++;
     saveMeta(meta);
   }
-  const seed = fixedSeed ?? (Date.now() ^ (performance.now() * 1000)) >>> 0;
-  game = new Game(seed);
+  layers(ride);
+  const level = ride.kind === 'level' ? ride.spot.levels[ride.li] : null;
+  const seed = level?.seed ?? fixedSeed ?? (Date.now() ^ (performance.now() * 1000)) >>> 0;
+  game = new Game(seed, level?.meters ?? 0);
   demo = null;
   watching = botSkill !== undefined;
   if (watching) auto = new Bot(botSkill!, makeRng(seed));
@@ -121,7 +186,8 @@ function startRide(botSkill?: number, fixedSeed?: number) {
   mode = 'play';
   endShown = false;
   realTime = 0;
-  dayStart = makeRng(seed ^ 0xda7)() * 0.12;
+  const day = ride.spot.day;
+  dayStart = typeof day === 'number' ? day : day[0] + makeRng(seed ^ 0xda7)() * (day[1] - day[0]);
   dayClock = 0;
   input.reset();
   ui.touch = input.isTouch || matchMedia('(pointer: coarse)').matches;
@@ -132,14 +198,14 @@ function startRide(botSkill?: number, fixedSeed?: number) {
   if (!watching && (!hintSeen('controls') || meta.runs <= 2)) {
     ui.hint(ui.touch ? '<b>Trzymaj</b> — w dół · <b>Puść</b> — w górę<br>Pompuj w rytmie fali, żeby przyspieszyć' : '<b>Trzymaj spację</b> — w dół · <b>Puść</b> — w górę<br>Pompuj w rytmie fali, żeby przyspieszyć', 6);
     markHint('controls');
-  }
+  } else if (!watching) ui.levelIntro(ride);
 }
 
 function pause() {
   if (mode !== 'play') return;
   mode = 'pause';
   input.reset();
-  ui.showPause();
+  ui.showPause(game, ride);
 }
 function resume() {
   if (mode !== 'pause') return;
@@ -148,9 +214,10 @@ function resume() {
 }
 function toMenu() {
   mode = 'menu';
+  ride = { kind: 'endless', spot: spotById(meta.lastSpot) };
   newDemo();
   ui.hideHud();
-  ui.showMenu(meta.best, test);
+  ui.showMenu(test);
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -161,7 +228,7 @@ window.addEventListener('pagehide', () => pause());
 window.addEventListener('keydown', (e) => {
   if (mode === 'end' && (e.code === 'Space' || e.code === 'Enter') && !e.repeat) {
     e.preventDefault();
-    startRide();
+    again();
   }
 });
 
@@ -169,7 +236,7 @@ function vibrate(ms: number) {
   try { navigator.vibrate?.(ms); } catch { /* ignore */ }
 }
 
-const WIPE_TEXT: Partial<Record<WipeCause, string>> = { lip: 'Lip cię zgarnął', rock: 'Skała!', log: 'Kłoda!', buoy: 'Boja!', rider: 'Zderzenie!' };
+const WIPE_TEXT: Partial<Record<WipeCause, string>> = { lip: 'Lip cię zgarnął', rock: 'Skała!', log: 'Kłoda!', buoy: 'Boja!', rider: 'Zderzenie!', ice: 'Kra!' };
 
 // first-time hints, one at a time, from the wave data (never shown while the bot rides)
 function hintOnce(id: string, html: string) {
@@ -183,6 +250,7 @@ const THING_HINT: Partial<Record<ThingKind, [string, string]>> = {
   buoy: ['high', 'Boja wysoko na ścianie — przejedź <b>dołem</b> albo przeskocz'],
   rider: ['rider', 'Inny surfer — omiń go <b>górą albo dołem</b>'],
   jelly: ['jelly', 'Meduzy przy dnie <b>parzą</b> i spowalniają'],
+  ice: ['ice', 'Kra wysoko na ścianie — przejedź <b>dołem</b> albo przeskocz'],
 };
 function hints() {
   const g = game, tempo = BAL.tempo;
@@ -249,22 +317,49 @@ function handleEvents(events: GameEvent[]) {
       case 'gone':
         vibrate(120);
         break;
+      case 'finish':
+        renderer.impact('perfect', game.x, game.y);
+        ui.pop('Meta!', 'perfect');
+        vibrate(30);
+        break;
     }
   }
   events.length = 0;
 }
 
 function checkEnd() {
-  if (endShown || game.mode !== 'gone' || game.modeT < 0.7 * BAL.tempo) return;
+  if (endShown) return;
+  const finished = game.mode === 'done' && game.modeT >= 1.2 * BAL.tempo;
+  if (!finished && !(game.mode === 'gone' && game.modeT >= 0.7 * BAL.tempo)) return;
   endShown = true;
   mode = 'end';
   input.reset();
-  const isBest = !watching && game.score > meta.best;
-  if (isBest) meta.best = game.score;
-  if (!watching) meta.shells += game.shells;
-  saveMeta(meta);
-  if (!watching) logRide({ date: today(), time: Math.round(realTime), meters: Math.round(game.meters), score: game.score, wipes: game.wipes, tricks: game.tricks, tempo: BAL.tempo, test: testLabel(test) });
-  ui.showEnd({ game, best: meta.best, isBest, realTime });
+  const g = game, r = ride;
+  let best = 0, isBest = false;
+  let extra = {};
+  if (!watching) {
+    meta.shells += g.shells;
+    if (r.kind === 'level') {
+      const rec = spotRec(meta, r.spot.id).levels[r.li];
+      isBest = finished && g.score > rec.best;
+      const res = recordLevel(meta, r.spot, r.li, g, finished);
+      const li = r.li + 1;
+      extra = { ...res, hasNext: li < r.spot.levels.length && levelUnlocked(meta, r.spot, li) };
+      best = rec.best;
+    } else if (r.kind === 'endless') {
+      const rec = spotRec(meta, r.spot.id);
+      isBest = g.score > rec.best;
+      if (isBest) rec.best = g.score;
+      best = rec.best;
+      meta.best = Math.max(meta.best, g.score);
+    } else {
+      if (r.counted) { meta.daily = { date: today(), score: g.score }; isBest = true; }
+      best = meta.daily?.score ?? 0;
+    }
+    saveMeta(meta);
+    logRide({ date: today(), time: Math.round(realTime), meters: Math.round(g.meters), score: g.score, wipes: g.wipes, tricks: g.tricks, tempo: BAL.tempo, test: testLabel(test), ride: r.kind === 'level' ? `${r.spot.id}-${r.li + 1}${finished ? '' : '-fail'}` : `${r.spot.id}-${r.kind}` });
+  }
+  ui.showEnd({ game: g, ride: r, realTime, finished, best, isBest, ...extra });
 }
 
 // ------------------------------------------------------------ adaptive quality
@@ -314,7 +409,7 @@ function frame(now: number) {
 }
 
 newDemo();
-ui.showMenu(meta.best, test);
+ui.showMenu(test);
 requestAnimationFrame(frame);
 // #shot: no overlay, the bot rides straight away — for screenshots (with #tod=…)
 if (/shot/.test(hash)) {
@@ -329,7 +424,9 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__fala = {
   get game() { return game; }, camera, renderer, BAL, loadStats,
   auto: (skill: number | null) => { auto = skill === null ? null : new Bot(skill, makeRng(7)); },
-  start: (seed?: number) => startRide(undefined, seed),
+  start: (seed?: number) => { ride = { kind: 'endless', spot: ride.spot }; startRide(undefined, seed); },
+  level: (spot: string, li: number) => { ride = { kind: 'level', spot: spotById(spot), li }; startRide(); },
+  meta, SPOTS,
   freeze: (on: boolean) => { frozen = on; fade = fadeTarget; },
   /** fix the time of day (0 dawn, 0.25 noon, 0.5 sunset, 0.75 night) or `null` for the ride's clock */
   tod: (p: number | keyof typeof PHASES | null) => { todFixed = p === null ? null : typeof p === 'number' ? p : PHASES[p]; },

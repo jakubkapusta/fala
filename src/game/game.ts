@@ -6,7 +6,8 @@ import { Wave } from './wave';
 import { Things, type ThingKind } from './things';
 import { clamp, smoothstep, wrapAngle } from '../core/math';
 
-export type Mode = 'ride' | 'air' | 'wipe' | 'gone';
+/** `done`: crossed a level's finish line (gliding on, out of reach of the wave) */
+export type Mode = 'ride' | 'air' | 'wipe' | 'gone' | 'done';
 export type LandQ = 'perfect' | 'clean';
 export type WipeCause = 'land' | 'lip' | ThingKind;
 export type GameEvent =
@@ -21,7 +22,8 @@ export type GameEvent =
   | { t: 'tubeOut'; secs: number; pts: number }
   | { t: 'recover' }
   | { t: 'scrape' }
-  | { t: 'gone' };
+  | { t: 'gone' }
+  | { t: 'finish' };
 
 export class Game {
   wave: Wave;
@@ -81,16 +83,20 @@ export class Game {
   tubes = 0;
   private tubeAcc = 0;
   lastWipe: WipeCause | null = null;
+  bestMult = 1;
+  /** a level's finish line (0 = endless) */
+  readonly finishX: number;
   /** remaining slow motion (game s); main.ts scales time while it runs */
   slowT = 0;
   events: GameEvent[] = [];
   trail: { x: number; y: number }[] = [];
 
-  constructor(readonly seed: number) {
+  constructor(readonly seed: number, finishMeters = 0) {
     this.wave = new Wave(seed);
     this.things = new Things(seed);
     const H = this.wave.H(0);
     this.x = this.x0 = BAL.start.lead * H;
+    this.finishX = finishMeters > 0 ? this.x0 + finishMeters * BAL.unitsPerMeter : 0;
     this.y = BAL.start.y * H;
     this.v = BAL.start.speed;
     this.th = BAL.surf.headDown * DEG * 0.6;
@@ -116,6 +122,18 @@ export class Game {
       this.x += this.v * 0.3 * dt;
       return;
     }
+    if (this.mode === 'done') {
+      // over the line: glide on across the face, the wave can't catch up any more
+      this.v += (Math.max(this.v, this.wave.vb * 1.3) - this.v) * Math.min(1, dt);
+      this.x += this.v * dt;
+      const H = this.wave.H(this.x);
+      this.y += (0.45 * H - this.y) * Math.min(1, dt * 2);
+      this.th += (0 - this.th) * Math.min(1, dt * 3);
+      this.ang = this.th;
+      this.crouch += (0 - this.crouch) * Math.min(1, dt * 4);
+      this.things.update(dt, this.wave, this.x, 9);
+      return;
+    }
     this.time += dt;
     this.crouch += ((held && this.mode === 'ride' ? 1 : 0) - this.crouch) * Math.min(1, dt * 10);
     if (this.mode === 'ride') this.ride(dt);
@@ -123,6 +141,15 @@ export class Game {
     else if (this.mode === 'wipe') this.tumble(dt);
 
     const w = this.wave;
+    if (this.finishX && this.x >= this.finishX && (this.mode === 'ride' || this.mode === 'air')) {
+      if (this.mode === 'air') { this.th = 0; this.y = Math.min(this.y, w.H(this.x)); }
+      this.mode = 'done';
+      this.modeT = 0;
+      this.inTube = false;
+      this.events.push({ t: 'finish' });
+      return;
+    }
+    this.bestMult = Math.max(this.bestMult, this.mult);
     this.things.update(dt, w, this.x, this.lead);
     this.touch(dt);
     this.tube(dt);

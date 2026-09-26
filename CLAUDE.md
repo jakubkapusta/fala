@@ -4,7 +4,7 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **Now: M4** — decisions below.
+- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **M4 (meta) in progress:** first complete version pushed 2026-09-26 — spots, levels with stars, boards and looks, daily wave, records. Waiting for the owner's test.
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
 
@@ -64,6 +64,19 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - `src/render/daycycle.ts` — time-of-day palette from keyframes (`palette(phase)`: 0 dawn, 0.25 noon, 0.4 golden, 0.5 sunset, 0.66–0.88 night).
 - `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close, the button indicator at the bottom showing the pumping rhythm), pops, menu ("Zobacz, jak jeździ bot" = watch the bot, touch to take over; M1 feel preset chips; the menu scrolls and goes two-column in landscape), pause, end screen with "Jeszcze raz" (< 1 s after the swallow). Bot rides don't set records.
 - `src/sim/bot.ts` + `scripts/sim.ts` — the player model and the simulator.
+
+## M4: spots, levels, progress (`src/game/spots.ts`, `progress.ts`, `boards.ts`)
+
+- **BAL is layered** on every ride start (`layers()` in `main.ts`): `resetBal()` (defaults captured at load) → M1 test presets → `#bal` → spot `bal` → level `bal` → board `bal`. Never tune BAL in place elsewhere; add a layer.
+- **Spots** (`SPOTS`): Hawaje (gentle, lesson), Bali (tubes over a reef, sunsets), Islandia (dark cold water, ice floes `ice`, aurora, dusk start), Zatoka (always night, jellyfish), Nazaré (giant fast waves, stormy sky, cliff). Each has `day` (fixed phase or start range), `bal`, `look` (palette tints, cloud cover, land silhouette on the horizon, aurora, reef — uniforms `u_clouds`, `u_land`, `u_landPeak`, `u_aurora`, `u_reef`).
+- **Levels**: 6 per spot, fixed seed, `meters` to the finish, `bal` with `wave.script` — the designed order of sections (o f c s t), then random. `Game(seed, finishMeters)`: crossing `finishX` → event `finish`, mode `done` (glides on, the wave can't catch up), end screen after 1.2 s. Goals (`GoalKind`: shells, score, perfect, tricks, airs, spin, tube, exits, nowipe, dolphin, pelican, mult, time) are checked on the finish line only; stars are a bit mask per level, kept per goal across attempts (`recordLevel`).
+- **Unlocking** (`progress.ts`): levels in order; level 5 done → next spot; bonus (level 6) at `BONUS_STARS` (10) of levels 1–5.
+- `npm run sim -- --levels [--runs 30] [--spot bali]` prints, per level and skill 0.3 / 0.6 / 0.9: finish %, time, and % of rides earning each star. Current rough targets: skill 0.6 finishes L1–5 ~50–100 %, bonus 10–40 %; skill 0.9 ≥ 70 % on L1–5; bots finish in ~45–90 s. `--spot X` also works for endless rides.
+- **Endless** per spot with its own record (`meta.spots[id].best`; the pre-M4 record became Hawaje's). **Daily wave**: FNV hash of the date → seed, spot rotates over the unlocked ones, the first ride of the day counts (`meta.daily`), later ones are practice.
+- **Boards** (shells): Deska (default, the owner-tuned feel), Longboard 200 (wide landing window, slow spin/turn), Fish 300 (flat sections), Shortboard 400 (fast spin, narrow window), Gun 600 (big waves, keeps more on wipeouts). Looks: wetsuit colour, trail colour. Drawn by `drawSurfer(..., deck, len, suit)`.
+- **UI**: menu (stars/shells wallet, Płyń → spots → levels with goals and a Płyń button / Bez końca, Fala dnia, Deski i wygląd, bot; the M1 test chips folded under "Ustawienia testowe"), level intro card with the goals, pause shows goal progress, end screens per ride kind (stars pop, goals ✓, unlock badges, Dalej / Jeszcze raz / Poziomy). HUD: level progress bar, finish line in the preview and on the wave (floats + checkered flag).
+- Saved in `fala.meta.v1`: `spots`, `board`, `owned`, `suit`, `trail`, `daily`, `lastSpot` (added with defaults; old saves load fine).
+- Dev: `__fala.level('bali', 2)`, `__fala.meta`.
 
 ## M3 rules (full ride)
 

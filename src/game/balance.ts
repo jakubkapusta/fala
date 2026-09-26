@@ -25,13 +25,17 @@ export const BAL = {
     blend: 160,
     /** open sections at the start before anything else can appear */
     warmup: 3,
-    /** difficulty ramps 0 → 1 over this many units of break travel */
+    /** difficulty ramps 0 → 1 over this many units of break travel, starting from diffStart */
     rampLen: 170000,
+    diffStart: 0,
     /** at full difficulty: breaking speed ×(1 + vbRamp), closeout weight ×(1 + closeRamp) */
     vbRamp: 0.6,
     closeRamp: 1,
     /** a closeout never follows a closeout and needs this much open/flat wall before it */
     closeGap: 1200,
+    /** a level's designed order of sections, one letter each (o open, f flat, c close, s steep,
+     *  t tube, spaces ignored); after it runs out the generator picks at random again */
+    script: '',
   },
 
   surf: {
@@ -126,7 +130,7 @@ export const BAL = {
   things: {
     obstacles: [0.14, 1.2] as [number, number],
     /** relative picks: rocks at the bottom, logs / buoys high on the wall, another surfer, jellyfish */
-    mix: { rock: 3, log: 2, buoy: 1.5, rider: 1, jelly: 2 },
+    mix: { rock: 3, log: 2, buoy: 1.5, rider: 1, jelly: 2, ice: 0 },
     helpers: [0.16, 0.06] as [number, number],
     helperMix: { dolphin: 2, pelican: 1 },
     /** extra helpers when the player is struggling (lead below `lowLead` H): one per `struggleGap` units */
@@ -137,7 +141,7 @@ export const BAL = {
     clear: 4000,
     /** hit radii (units): the surfer, then each kind */
     surferR: 12,
-    r: { rock: 26, log: 18, buoy: 15, rider: 18, jelly: 12, pelican: 30, shell: 22 },
+    r: { rock: 26, log: 18, buoy: 15, rider: 18, jelly: 12, ice: 20, pelican: 30, shell: 22 },
     /** rider: horizontal speed ×vb of its section, height band (y/H) either low or high */
     riderSpeed: 0.85,
     riderLow: 0.25,
@@ -204,6 +208,13 @@ export const BAL = {
 };
 
 export type Bal = typeof BAL;
+
+/** The defaults, before any preset / spot / level / board override. */
+const BASE = JSON.stringify(BAL);
+/** Put every knob back to its default (then re-apply the layers: test presets, #bal, spot, level, board). */
+export function resetBal() {
+  tuneBal(JSON.parse(BASE));
+}
 
 /** Deep-merge overrides (from the sim or the URL) into BAL. */
 export function tuneBal(over: Record<string, unknown>, into: Record<string, unknown> = BAL as unknown as Record<string, unknown>) {

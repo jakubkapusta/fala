@@ -12,6 +12,8 @@ import type { Camera } from '../game/camera';
 import { BAL } from '../game/balance';
 import { clamp } from '../core/math';
 import { palette, type Palette } from './daycycle';
+import type { Look } from '../game/spots';
+import { BOARDS, SUITS, TRAILS, type Board, type Suit, type Trail } from '../game/boards';
 import { drawSurfer } from './surfer';
 import { drawRiders, drawThings } from './things';
 
@@ -57,6 +59,9 @@ export class Renderer {
   private rnd = 1;
   private pal: Palette = palette(0.25);
   private prevTh = 0;
+  /** the spot's look and the player's gear */
+  look: Look | null = null;
+  gear: { board: Board; suit: Suit; trail: Trail } = { board: BOARDS[0], suit: SUITS[0], trail: TRAILS[0] };
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
@@ -167,6 +172,11 @@ export class Renderer {
     this.resize();
     this.t += opts.dt;
     const P = (this.pal = palette(opts.phase));
+    const L = this.look;
+    if (L) {
+      const mul = (a: number[], m: number[]) => { a[0] *= m[0]; a[1] *= m[1]; a[2] *= m[2]; };
+      mul(P.deep, L.deep); mul(P.scat, L.scat); mul(P.top, L.sky); mul(P.hor, L.sky); mul(P.cloud, L.sky);
+    }
     this.stepFx(g, cam, opts.dt);
 
     this.scene.bind();
@@ -196,7 +206,8 @@ export class Renderer {
     const sunVis = clamp((P.sunY + 0.03) / 0.06, 0, 1) * clamp(P.sun[0] / 2, 0, 1);
     const lightX = sunVis > 0.2 ? P.sunX : P.moonX;
     drawRiders(fig, g, cam, P, this.t, lightX);
-    drawSurfer(fig, g, cam, P, this.t, lightX);
+    const gr = this.gear;
+    drawSurfer(fig, g, cam, P, this.t, lightX, gr.board.deck, gr.board.len, gr.suit.col);
     fig.buf.upload();
     this.pFlat.use();
     gl.bindVertexArray(fig.buf.vao);
@@ -244,7 +255,9 @@ export class Renderer {
       .v3('u_scat', P.scat).v3('u_back', P.back).v3('u_cloud', P.cloud)
       .f3('u_sun', P.sunX, P.sunY, sunVis).f3('u_moon', P.moonX, P.moonY, P.moon)
       .f1('u_backX', sunVis > 0.2 ? P.sunX : P.moonX).f1('u_night', P.night)
-      .f3('u_tube', BAL.tube.reach, BAL.tube.mouth, BAL.tube.hi);
+      .f3('u_tube', BAL.tube.reach, BAL.tube.mouth, BAL.tube.hi)
+      .f1('u_clouds', this.look?.clouds ?? 0).f1('u_aurora', this.look?.aurora ?? 0).f1('u_reef', this.look?.reef ?? 0)
+      .f4('u_land', this.look?.land.h ?? 0, this.look?.land.rough ?? 0, this.look?.land.from ?? 0, this.look?.land.to ?? 1).f1('u_landPeak', this.look?.land.peak ?? 0.5);
     this.fullscreen();
   }
 
@@ -266,7 +279,8 @@ export class Renderer {
       if (b.x < x0 || a.x > x1 || a.x < g.wave.xb) continue;
       const k = i / tr.length, age = 1 - k;
       const sink = age * age * H * 0.06;
-      sh.line(a.x, a.y - sink, b.x, b.y - sink, (1 + k * 2.2) * px, this.foam(0.32 * k * k));
+      const tc = this.gear.trail.col;
+      sh.line(a.x, a.y - sink, b.x, b.y - sink, (1 + k * 2.2) * px, tc ? glow(tc[0], tc[1], tc[2], 0.55 * k * k) : this.foam(0.32 * k * k));
       if (P.night > 0.05) sh.line(a.x, a.y - sink, b.x, b.y - sink, (3 + k * 5) * px, glow(0.1, 0.55, 1.2, 0.5 * k * P.night));
     }
   }

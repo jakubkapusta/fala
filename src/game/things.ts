@@ -9,8 +9,8 @@ import type { Section, Wave } from './wave';
 import { makeRng, type Rng } from '../core/rng';
 import { lerp } from '../core/math';
 
-export type ThingKind = 'rock' | 'log' | 'buoy' | 'rider' | 'jelly' | 'dolphin' | 'pelican' | 'shell';
-export const OBSTACLES: ThingKind[] = ['rock', 'log', 'buoy', 'rider', 'jelly'];
+export type ThingKind = 'rock' | 'log' | 'buoy' | 'rider' | 'jelly' | 'ice' | 'dolphin' | 'pelican' | 'shell';
+export const OBSTACLES: ThingKind[] = ['rock', 'log', 'buoy', 'rider', 'jelly', 'ice'];
 
 export type Thing = {
   kind: ThingKind;
@@ -69,7 +69,7 @@ export class Things {
         const x = r.range(lo, hi);
         if (k === 'rock') this.add(k, x, r.range(0.03, 0.09));
         else if (k === 'jelly') this.add(k, x, r.range(0.04, 0.12));
-        else if (k === 'log' || k === 'buoy') this.add(k, x, r.range(0.58, 0.84));
+        else if (k === 'log' || k === 'buoy' || k === 'ice') this.add(k, x, r.range(0.58, 0.84));
         else this.add(k, x, r() < 0.5 ? T.riderLow : T.riderHigh);
       }
     }
@@ -123,7 +123,7 @@ export class Things {
       if (t.kind === 'rider') h += 0.05 * Math.sin(t.phase + t.age * 3);
       else if (t.kind === 'dolphin') h += 0.08 * Math.sin(t.phase + t.age * 2.2);
       else if (t.kind === 'pelican') h += 0.04 * Math.sin(t.phase + t.age * 1.3);
-      else if (t.kind === 'log' || t.kind === 'buoy') h += 0.015 * Math.sin(t.phase + t.age * 1.7);
+      else if (t.kind === 'log' || t.kind === 'buoy' || t.kind === 'ice') h += 0.015 * Math.sin(t.phase + t.age * 1.7);
       t.y = h * w.H(t.x);
     }
     // gone into the whitewater, or far behind
