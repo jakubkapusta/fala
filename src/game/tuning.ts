@@ -10,12 +10,13 @@ type Option = { id: string; label: string; bal: Record<string, unknown> };
 
 export const TEST_GROUPS: { key: TestKey; label: string; def: string; options: Option[] }[] = [
   {
-    key: 'tempo', label: 'Tempo', def: '1',
+    key: 'tempo', label: 'Tempo', def: '1.2',
     options: [
-      { id: '0.9', label: '0,9', bal: { tempo: 0.9 } },
       { id: '1', label: '1', bal: { tempo: 1 } },
       { id: '1.1', label: '1,1', bal: { tempo: 1.1 } },
       { id: '1.2', label: '1,2', bal: { tempo: 1.2 } },
+      { id: '1.3', label: '1,3', bal: { tempo: 1.3 } },
+      { id: '1.4', label: '1,4', bal: { tempo: 1.4 } },
     ],
   },
   {

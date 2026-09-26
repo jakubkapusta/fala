@@ -238,8 +238,9 @@ export class Game {
     const diff = Math.abs(wrapAngle(this.ang - this.refAngle())) / DEG;
     const halfTurns = Math.floor((this.rot / DEG + 25) / 180);
     let q: LandQ | null = diff <= L.perfect ? 'perfect' : diff <= L.clean ? 'clean' : null;
-    // a plain hop (no input in the air) always lands, but is never "perfect"
-    if (!this.heldInAir) q = 'clean';
+    // a plain hop (no input in the air) always lands, but is never "perfect"; a hop carried
+    // straight into a dive (armed, board lined up) is
+    if (!this.heldInAir && !this.armed) q = 'clean';
     if (!q) return this.wipeout();
 
     // the flight itself is free height, not free speed: a clean landing keeps (most of) the
