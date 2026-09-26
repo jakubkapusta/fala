@@ -1,8 +1,10 @@
 // Persistence. Every read and write is wrapped: storage can be missing, full or blocked.
 
-/** `tempo3`: the M1 test tempo picked in the menu (values saved for earlier physics are ignored on purpose) */
-export type Meta = { v: 1; best: number; runs: number; tempo3: number | null };
-export type RideStat = { date: string; time: number; meters: number; score: number; wipes: number; tricks: number; tempo: number };
+import type { TestSel } from './tuning';
+
+/** `test`: the M1 feel presets picked in the menu (older tempo-only picks are ignored on purpose) */
+export type Meta = { v: 1; best: number; runs: number; test: Partial<TestSel> | null };
+export type RideStat = { date: string; time: number; meters: number; score: number; wipes: number; tricks: number; tempo: number; test?: string };
 
 const KEY_META = 'fala.meta.v1';
 const KEY_STATS = 'fala.stats.v1';
@@ -24,7 +26,7 @@ function write(key: string, v: unknown) {
 
 export function loadMeta(): Meta {
   const m = read<Partial<Meta>>(KEY_META);
-  return { v: 1, best: m?.best ?? 0, runs: m?.runs ?? 0, tempo3: m?.tempo3 ?? null };
+  return { v: 1, best: m?.best ?? 0, runs: m?.runs ?? 0, test: m?.test ?? null };
 }
 export const saveMeta = (m: Meta) => write(KEY_META, m);
 

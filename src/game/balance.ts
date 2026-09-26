@@ -9,14 +9,14 @@
 
 export const BAL = {
   /** game seconds per real second; scales the whole simulation, not its shape */
-  tempo: 0.9,
+  tempo: 1,
   unitsPerMeter: 25,
 
   wave: {
     /** section kinds: wall height range, length range, breaking speed, power multiplier, pick weight */
-    open: { H: [200, 250], len: [1400, 2600], vb: 320, power: 1, weight: 6 },
-    flat: { H: [130, 160], len: [900, 1500], vb: 260, power: 0.55, weight: 2 },
-    close: { H: [210, 270], len: [420, 700], vb: 500, power: 1.15, weight: 1.6 },
+    open: { H: [200, 250], len: [1400, 2600], vb: 300, power: 1, weight: 6 },
+    flat: { H: [130, 160], len: [900, 1500], vb: 245, power: 0.55, weight: 2 },
+    close: { H: [210, 270], len: [420, 700], vb: 480, power: 1.15, weight: 1.6 },
     /** units over which height / breaking speed blend at a section boundary */
     blend: 160,
     /** open sections at the start before anything else can appear */
@@ -32,10 +32,10 @@ export const BAL = {
 
   surf: {
     /** target heading when holding (down the face) / released (up the face) */
-    headDown: -40,
-    headUp: 34,
+    headDown: -46,
+    headUp: 42,
     /** heading turn rate (deg/s) */
-    turn: 160,
+    turn: 210,
     /** gravity along the face */
     g: 420,
     /** wave push at full power (all a surfer riding straight gets) */
@@ -43,7 +43,7 @@ export const BAL = {
     /** pumping, part 1: gravity ×(1 + press·pocket) while diving *and holding*, ×(1 − lift·pocket)
      *  while climbing (the wave lifts the surfer, so going back up costs little in the pocket) */
     press: 0.4,
-    lift: 0.75,
+    lift: 0.85,
     /** pumping, part 2 (the main one): drive while turning up near the bottom / down near the top.
      *  Bottom turn: zero at the trough, full between band[1] and band[2], zero again at band[3] (y/H).
      *  Top turn: zero below band[0], full above band[1]. */
@@ -80,7 +80,7 @@ export const BAL = {
     /** vertical speed needed to leave the lip; below it the surfer rolls over the top */
     launchVy: 110,
     /** extra vertical kick from the lip, × pocket strength */
-    pop: 200,
+    pop: 320,
     g: 600,
     /** board rotation while holding (deg/s, forward = clockwise) */
     spin: 650,

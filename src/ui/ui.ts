@@ -2,6 +2,7 @@
 
 import type { Game } from '../game/game';
 import { BAL } from '../game/balance';
+import { TEST_GROUPS, type TestKey, type TestSel } from '../game/tuning';
 
 export type UiHooks = {
   start: () => void;
@@ -9,12 +10,11 @@ export type UiHooks = {
   resume: () => void;
   menu: () => void;
   pause: () => void;
-  setTempo: (t: number) => void;
+  setTest: (key: TestKey, id: string) => void;
 };
 
 export type EndInfo = { game: Game; best: number; isBest: boolean; realTime: number };
 
-const TEMPOS = [0.8, 0.9, 1];
 
 const el = (html: string) => {
   const d = document.createElement('div');
@@ -87,7 +87,7 @@ export class Ui {
     for (const s of [this.menuEl, this.pauseEl, this.endEl]) s.classList.remove('show');
   }
 
-  showMenu(best: number, tempo: number) {
+  showMenu(best: number, test: TestSel) {
     this.hideScreens();
     this.hud.classList.add('hidden');
     this.menuEl.innerHTML = `
@@ -99,10 +99,11 @@ export class Ui {
       ${best > 0 ? `<div class="best">Rekord: <b>${fmt(best)}</b></div>` : ''}
       <button class="btn primary big go">Płyń</button>
       <button class="btn ghost watch">Zobacz, jak jeździ bot</button>
-      <div class="tempo"><span>Tempo (test M1)</span>${TEMPOS.map((t) => `<button class="chip${Math.abs(t - tempo) < 1e-3 ? ' on' : ''}" data-t="${t}">${String(t).replace('.', ',')}</button>`).join('')}</div>`;
+      <div class="tests"><div class="tests-h">Ustawienia testowe (M1)</div>${TEST_GROUPS.map((g) => `<div class="trow"><span>${g.label}</span>${g.options
+        .map((o) => `<button class="chip${test[g.key] === o.id ? ' on' : ''}" data-k="${g.key}" data-id="${o.id}">${o.label}</button>`).join('')}</div>`).join('')}</div>`;
     this.menuEl.querySelector('.go')!.addEventListener('click', () => this.h.start());
     this.menuEl.querySelector('.watch')!.addEventListener('click', () => this.h.watch());
-    this.menuEl.querySelectorAll<HTMLElement>('.chip').forEach((b) => b.addEventListener('click', () => this.h.setTempo(Number(b.dataset.t))));
+    this.menuEl.querySelectorAll<HTMLElement>('.chip').forEach((b) => b.addEventListener('click', () => this.h.setTest(b.dataset.k as TestKey, b.dataset.id!)));
     this.menuEl.classList.add('show');
   }
 
@@ -155,7 +156,7 @@ export class Ui {
     this.hintT = time;
   }
 
-  update(g: Game, dt: number, extra: { quality: number; tempo: number; held: boolean; bot: boolean }) {
+  update(g: Game, dt: number, extra: { quality: number; tempo: number; held: boolean; bot: boolean; test: string }) {
     this.t += dt;
     this.drawPreview(g);
     // the button, visible: shows the pumping rhythm (yours or the bot's)
@@ -192,7 +193,7 @@ export class Ui {
     }
     if (this.showDebug) {
       this.debug.style.display = 'block';
-      this.debug.textContent = `v ${g.v.toFixed(0)} · vx ${g.vxNow.toFixed(0)} · fala ${g.wave.vb.toFixed(0)} · przewaga ${g.lead.toFixed(2)}H · ${g.wave.sectionAt(g.x).kind} · ${this.fps.toFixed(0)} fps · q ${extra.quality.toFixed(2)} · tempo ${extra.tempo}`;
+      this.debug.textContent = `v ${g.v.toFixed(0)} · vx ${g.vxNow.toFixed(0)} · fala ${g.wave.vb.toFixed(0)} · przewaga ${g.lead.toFixed(2)}H · ${g.wave.sectionAt(g.x).kind} · ${this.fps.toFixed(0)} fps · q ${extra.quality.toFixed(2)} · tempo ${extra.tempo} · ${extra.test}`;
     }
   }
 

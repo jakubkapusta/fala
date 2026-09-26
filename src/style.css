@@ -145,8 +145,11 @@ button, .clickable { pointer-events: auto; }
 .best { color: var(--sun); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 18px; }
 .best b { font-weight: 600; }
 .badge { display: inline-block; color: #3a2204; background: var(--sun); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px; margin: 0 0 18px; }
-.tempo { display: flex; align-items: center; gap: 6px; margin-top: 26px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); flex-wrap: wrap; justify-content: center; }
-.tempo span { margin-right: 4px; }
+.tests { margin-top: 20px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.tests-h { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 2px; }
+.trow { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; justify-content: center; }
+.trow span { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); width: 54px; flex: none; text-align: right; margin-right: 3px; }
+.trow .chip { padding: 5px 8px; font-size: 12px; white-space: nowrap; }
 .chip { font-family: var(--body); font-size: 13px; color: var(--ink); background: rgba(3, 22, 30, 0.45); border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
 .chip.on { background: var(--sea); color: #032027; border-color: var(--sea); font-weight: 600; }
 
@@ -164,7 +167,8 @@ button, .clickable { pointer-events: auto; }
   .end-top { margin-top: 0; }
   .big-score { font-size: 44px; margin: 2px 0 6px; }
   .stats { grid-template-columns: repeat(5, auto); }
-  .tempo { margin-top: 12px; }
+  .tests { margin-top: 8px; gap: 4px; }
+  .menu { justify-content: flex-start; }
 }
 
 /* the button, visible (rhythm feedback) */
@@ -198,3 +202,13 @@ button, .clickable { pointer-events: auto; }
   opacity: 0; transition: opacity 0.3s;
 }
 .preview.show { opacity: 1; }
+
+/* the menu scrolls if it doesn't fit (it must catch touches for that) */
+.screen.menu.show { pointer-events: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .menu { display: grid; grid-template-columns: 1fr auto; grid-auto-flow: dense; align-content: center; column-gap: 28px; text-align: center; }
+  .menu > * { grid-column: 1; justify-self: center; }
+  .menu > .tests { grid-column: 2; grid-row: 1 / span 7; align-self: center; margin-top: 0; }
+  .menu .title { font-size: 56px; }
+  .menu .btn.big { padding: 13px 48px; font-size: 18px; }
+}

@@ -12,6 +12,7 @@ import { BAL, tuneBal } from './game/balance';
 import { hintSeen, loadMeta, loadStats, logRide, markHint, saveMeta, today } from './game/save';
 import { Ui } from './ui/ui';
 import { Bot } from './sim/bot';
+import { applyTest, cleanTest, testLabel } from './game/tuning';
 import { makeRng } from './core/rng';
 
 type Mode = 'menu' | 'play' | 'pause' | 'end';
@@ -33,7 +34,8 @@ try {
 }
 
 const meta = loadMeta();
-if (meta.tempo3) BAL.tempo = meta.tempo3;
+let test = cleanTest(meta.test);
+applyTest(test);
 const camera = new Camera();
 let mode: Mode = 'menu';
 let game: Game;
@@ -53,11 +55,12 @@ const ui = new Ui({
   resume: () => resume(),
   menu: () => toMenu(),
   pause: () => pause(),
-  setTempo: (t) => {
-    BAL.tempo = t;
-    meta.tempo3 = t;
+  setTest: (key, id) => {
+    test = cleanTest({ ...test, [key]: id });
+    applyTest(test);
+    meta.test = test;
     saveMeta(meta);
-    ui.showMenu(meta.best, BAL.tempo);
+    ui.showMenu(meta.best, test);
   },
 });
 ui.touch = matchMedia('(pointer: coarse)').matches;
@@ -119,7 +122,7 @@ function toMenu() {
   mode = 'menu';
   newDemo();
   ui.hideHud();
-  ui.showMenu(meta.best, BAL.tempo);
+  ui.showMenu(meta.best, test);
 }
 
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
@@ -175,7 +178,7 @@ function checkEnd() {
   const isBest = !watching && game.score > meta.best;
   if (isBest) meta.best = game.score;
   saveMeta(meta);
-  if (!watching) logRide({ date: today(), time: Math.round(realTime), meters: Math.round(game.meters), score: game.score, wipes: game.wipes, tricks: game.tricks, tempo: BAL.tempo });
+  if (!watching) logRide({ date: today(), time: Math.round(realTime), meters: Math.round(game.meters), score: game.score, wipes: game.wipes, tricks: game.tricks, tempo: BAL.tempo, test: testLabel(test) });
   ui.showEnd({ game, best: meta.best, isBest, realTime });
 }
 
@@ -211,7 +214,7 @@ function frame(now: number) {
     game.update(gdt, held);
     if (game.mode !== 'gone') realTime += dt * slowmo;
     handleEvents(game.events);
-    if (mode === 'play') ui.update(game, dt, { quality: renderer.quality, tempo: BAL.tempo, held, bot: !!auto });
+    if (mode === 'play') ui.update(game, dt, { quality: renderer.quality, tempo: BAL.tempo, held, bot: !!auto, test: testLabel(test) });
     checkEnd();
   }
   camera.update(game, canvas.clientWidth || innerWidth, canvas.clientHeight || innerHeight, dt);
@@ -222,7 +225,7 @@ function frame(now: number) {
 }
 
 newDemo();
-ui.showMenu(meta.best, BAL.tempo);
+ui.showMenu(meta.best, test);
 requestAnimationFrame(frame);
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

@@ -23,9 +23,10 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - `src/game/game.ts` — one ride: modes `ride` / `air` / `wipe` / `gone`, one input `held`. Riding: heading turns towards `headDown` (held) / `headUp` (released); speed from gravity along the face, a small straight-line `push`, and the **pump drive** (see below); launch off the lip, spin in the air, landing graded against `refAngle()`, wipeout, swallowed when `x < xb − swallow·H`. Score = metres + trick points × multiplier.
 - `src/game/camera.ts` — adaptive framing: fits wall + flight apex, `lookAhead` real seconds ahead, the break behind; largest zoom that fits all three; springs on zoom and offsets only.
 - `src/game/input.ts` — one button: any pointer down / space / ArrowDown = held; Esc = pause.
+- `src/game/tuning.ts` — **M1 feel presets** picked in the menu ("Ustawienia testowe"): tempo, turn rate, heading angle, airs. Each option overrides a few `BAL` knobs; the defaults there must equal the values in `balance.ts` (the sim and ride-length balance use `balance.ts`). The choice is saved in `fala.meta.v1` (`test`) and logged with every ride in `fala.stats.v1`.
 - `src/game/save.ts` — `fala.meta.v1`, `fala.stats.v1` (every ride), `fala.hints.v1`; all storage access in try/catch.
 - `src/render/renderer.ts` — scene → bloom → composite. **M1: placeholder world** drawn with `shapes.ts` (flat triangles, premultiplied linear colours; `glow()` = additive). Visual-only randomness uses the renderer's own RNG.
-- `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close, the button indicator at the bottom showing the pumping rhythm), pops, menu ("Zobacz, jak jeździ bot" = watch the bot, touch to take over; M1 tempo test chips), pause, end screen with "Jeszcze raz" (< 1 s after the swallow). Bot rides don't set records.
+- `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close, the button indicator at the bottom showing the pumping rhythm), pops, menu ("Zobacz, jak jeździ bot" = watch the bot, touch to take over; M1 feel preset chips; the menu scrolls and goes two-column in landscape), pause, end screen with "Jeszcze raz" (< 1 s after the swallow). Bot rides don't set records.
 - `src/sim/bot.ts` + `scripts/sim.ts` — the player model and the simulator.
 
 ## Pumping model (the heart of M1)
@@ -52,7 +53,7 @@ npm run sim -- --trace 1007 --skill 0.5          # one ride, a line every 0.2 ga
 BAL='{"wave":{"open":{"vb":210}}}' npm run sim  # try knobs without editing
 ```
 
-Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s (deliberately easier now), closeouts passable with good play. Current (tempo 0.9): see `npm run sim` — about 50 s / 150 s / 250 s, ~half of skill-0.9 rides reach night. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 0.9 — changing `tempo` rescales real ride times.
+Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s (deliberately easier now), closeouts passable with good play. Current (default presets: tempo 1, turn 210°/s, headings −46°/+42°, high airs): about 58 s / 149 s / 227 s, ~half of skill-0.9 rides reach night. Other presets change ride length (faster = shorter); rebalance once the owner picks. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 1 — changing `tempo` rescales real ride times.
 
 ## Offline / PWA
 
