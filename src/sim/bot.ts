@@ -19,6 +19,7 @@ export class Bot {
   private wasAir = false;
   private diveAfter = false;
   private goAir = false;
+  private armDive = false;
   private wasWipe = false;
 
   constructor(readonly skill: number, private rng: Rng) {
@@ -56,7 +57,12 @@ export class Bot {
         this.goAir = !careful && g.v > 280 && this.rng() < 0.12 + 0.3 * this.skill;
       } else if (!this.held && h > (this.goAir ? 0.97 : this.hi + (this.rng() - 0.5) * sloppy)) this.held = true;
     } else if (air) {
-      this.held = g.rot < this.spinTarget;
+      // spin until the planned rotation, then (a decent player) press again just before touchdown
+      // to carry the landing into a dive
+      const A = BAL.air;
+      const H = g.wave.H(g.x);
+      const tLand = g.vy < 0 ? (g.vy + Math.sqrt(g.vy * g.vy + 2 * A.g * Math.max(0, g.y - H))) / A.g : Infinity;
+      this.held = g.rot < this.spinTarget || (this.armDive && tLand < BAL.land.armWindow * 0.8);
     } else if (g.mode === 'wipe') {
       // most players get ready to drop back down while climbing onto the board
       this.held = this.diveAfter;
@@ -69,6 +75,7 @@ export class Bot {
   /** At take-off: decide how many full turns to try and when to stop spinning. */
   private planAir(g: Game) {
     this.spinTarget = 0;
+    this.armDive = this.rng() < 0.3 + 0.6 * this.skill;
     const A = BAL.air;
     const tAir = (2 * g.vy) / A.g;
     const flightLand = -Math.atan2(g.vy, g.vx);

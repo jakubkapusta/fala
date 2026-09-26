@@ -94,8 +94,8 @@ export class Ui {
       <div class="title">Fala</div>
       <p class="lead">Jedź wzdłuż łamiącej się fali. Nie daj się jej dogonić.</p>
       <div class="howto">${this.touch
-        ? '<b>Trzymaj palec</b> — zjazd w dół ściany<br><b>Puść</b> — wspinaczka w górę<br>W powietrzu trzymanie <b>obraca deską</b>'
-        : '<b>Trzymaj spację</b> albo przycisk myszy — zjazd w dół<br><b>Puść</b> — wspinaczka w górę<br>W powietrzu trzymanie <b>obraca deską</b> · Esc — pauza'}</div>
+        ? '<b>Trzymaj palec</b> — zjazd w dół ściany<br><b>Puść</b> — wspinaczka w górę<br>W powietrzu trzymanie <b>obraca deską</b><br>Tuż przed wodą <b>dotknij znowu</b> — wejdziesz w nurkowanie'
+        : '<b>Trzymaj spację</b> albo przycisk myszy — zjazd w dół<br><b>Puść</b> — wspinaczka w górę<br>W powietrzu trzymanie <b>obraca deską</b><br>Tuż przed wodą <b>wciśnij znowu</b> — wejdziesz w nurkowanie · Esc — pauza'}</div>
       ${best > 0 ? `<div class="best">Rekord: <b>${fmt(best)}</b></div>` : ''}
       <button class="btn primary big go">Płyń</button>
       <button class="btn ghost watch">Zobacz, jak jeździ bot</button>

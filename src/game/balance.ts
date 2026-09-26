@@ -98,8 +98,13 @@ export const BAL = {
     perfectMul: 1.12,
     perfectAdd: 40,
     cleanKeep: 1,
-    /** heading right after landing is clamped to this (deg) */
+    /** a fresh press within `armWindow` game s of touchdown doesn't spin the board, it arms the dive:
+     *  heading right after landing = flight direction clamped to [minHeading, maxHeading] (deg),
+     *  then `dive` game s of riding down the face regardless of input */
+    armWindow: 0.3,
     minHeading: -60,
+    maxHeading: -20,
+    dive: 0.25,
   },
 
   wipe: { keep: 0.45, time: 1.0, sink: 0.55 },

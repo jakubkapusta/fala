@@ -42,6 +42,11 @@ export class Game {
   apex = 0;
   airT = 0;
   launchV = 0;
+  /** remaining landing dive (game s) */
+  diveT = 0;
+  /** held in the last moments of a flight: the landing turns into a dive */
+  armed = false;
+  private heldPrev = false;
 
   // score
   x0: number;
@@ -112,7 +117,8 @@ export class Game {
   private ride(dt: number) {
     const S = BAL.surf, w = this.wave;
     // the drop-in: the first moments ride down the face whatever the input
-    const dropIn = this.time < BAL.start.dropIn;
+    const dropIn = this.time < BAL.start.dropIn || this.diveT > 0;
+    this.diveT = Math.max(0, this.diveT - dt);
     const target = (this.held || dropIn ? S.headDown : S.headUp) * DEG;
     const step = S.turn * DEG * dt;
     const th0 = this.th;
@@ -181,6 +187,8 @@ export class Game {
     this.ang = this.th;
     this.rot = 0;
     this.heldInAir = false;
+    this.armed = false;
+    this.heldPrev = this.held;
     this.apex = 0;
     this.airT = 0;
     this.mode = 'air';
@@ -206,7 +214,14 @@ export class Game {
     const H = w.H(this.x);
     this.apex = Math.max(this.apex, this.y - H);
     const a0 = this.ang;
-    if (this.held) {
+    // time to touchdown (falling towards the crest line)
+    const disc = this.vy * this.vy + 2 * A.g * Math.max(0, this.y - H);
+    const tLand = this.vy < 0 ? (this.vy + Math.sqrt(disc)) / A.g : Infinity;
+    // a fresh press just before touchdown arms the dive; the board keeps swinging to the landing
+    // angle meanwhile. Holding a spin non-stop into the water keeps spinning (and may wipe you out).
+    if (this.held && !this.heldPrev && tLand < BAL.land.armWindow) this.armed = true;
+    this.heldPrev = this.held;
+    if (this.held && !this.armed) {
       this.ang -= A.spin * DEG * dt;
       this.heldInAir = true;
     } else {
@@ -230,8 +245,13 @@ export class Game {
     // the flight itself is free height, not free speed: a clean landing keeps (most of) the
     // take-off speed, only a perfect one adds to it
     this.v = q === 'perfect' ? this.launchV * L.perfectMul + L.perfectAdd : this.launchV * L.cleanKeep;
-    // holding on touchdown carries the fall straight into a dive; otherwise the board levels out
-    this.th = clamp(Math.atan2(this.vy, this.vx) * (this.held ? 1 : 0.3), L.minHeading * DEG, 0);
+    // holding into the touchdown (the armed dive) carries the fall straight on down the face for
+    // `dive` seconds, then control returns (release = bottom turn). Without it the board levels out.
+    const flight = Math.atan2(this.vy, this.vx);
+    if (this.armed || this.held) {
+      this.th = clamp(flight, L.minHeading * DEG, L.maxHeading * DEG);
+      this.diveT = L.dive;
+    } else this.th = clamp(flight * 0.3, L.minHeading * DEG, 0);
     this.y = H - 0.5;
     this.mode = 'ride';
     this.modeT = 0;
