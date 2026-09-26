@@ -119,6 +119,11 @@ export class Wave {
     return this.pocket(x) * (S.floor + (1 - S.floor) * Math.exp(-q * q));
   }
 
+  /** 0..1, how much x belongs to a section of this kind (blended at the joins; for visuals). */
+  kindAt(x: number, kind: SectionKind) {
+    return this.blended(x, (s) => (s.kind === kind ? 1 : 0));
+  }
+
   /** Is x inside foam (behind the break)? */
   foam(x: number) {
     return x < this.xb;

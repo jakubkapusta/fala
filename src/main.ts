@@ -14,6 +14,7 @@ import { Ui } from './ui/ui';
 import { Bot } from './sim/bot';
 import { applyTest, cleanTest, testLabel } from './game/tuning';
 import { makeRng } from './core/rng';
+import { PHASES } from './render/daycycle';
 
 type Mode = 'menu' | 'play' | 'pause' | 'end';
 
@@ -49,6 +50,16 @@ let fadeTarget = 0;
 let endShown = false;
 let realTime = 0;
 
+// time of day: a ride starts between dawn and late morning and the day moves on with the ride
+// (a full cycle in DAY_S real seconds), so night is the reward of a long ride; the menu shows any time
+const DAY_S = 360;
+let dayStart = 0;
+let dayClock = 0;
+/** dev: fixed time of day (`__fala.tod(0.5)`, `#tod=0.5` or `#tod=sunset`) */
+let todFixed: number | null = null;
+const todMatch = /tod=([a-z.0-9]+)/.exec(hash);
+if (todMatch) todFixed = todMatch[1] in PHASES ? PHASES[todMatch[1] as keyof typeof PHASES] : parseFloat(todMatch[1]) || 0;
+
 const ui = new Ui({
   start: () => startRide(),
   watch: () => startRide(0.92),
@@ -76,6 +87,8 @@ const input = new Input(canvas, {
 function newDemo() {
   game = new Game((Date.now() & 0xffff) + 1);
   demo = new Bot(0.85, makeRng(game.seed));
+  dayStart = makeRng(game.seed ^ 0xda7)();
+  dayClock = 0;
   camera.update(game, canvas.clientWidth, canvas.clientHeight, 0, true);
 }
 
@@ -95,6 +108,8 @@ function startRide(botSkill?: number) {
   mode = 'play';
   endShown = false;
   realTime = 0;
+  dayStart = makeRng(seed ^ 0xda7)() * 0.12;
+  dayClock = 0;
   input.reset();
   ui.touch = input.isTouch || matchMedia('(pointer: coarse)').matches;
   ui.play();
@@ -219,7 +234,8 @@ function frame(now: number) {
   }
   camera.update(game, canvas.clientWidth || innerWidth, canvas.clientHeight || innerHeight, dt);
   fade += (fadeTarget - fade) * Math.min(1, dt * 4);
-  renderer.render(game, camera, { fade, dt });
+  if (mode !== 'pause' && game.mode !== 'gone') dayClock += dt;
+  renderer.render(game, camera, { fade, dt, phase: todFixed ?? dayStart + dayClock / DAY_S });
   if (mode === 'play') adapt(raw);
   requestAnimationFrame(frame);
 }
@@ -227,6 +243,11 @@ function frame(now: number) {
 newDemo();
 ui.showMenu(meta.best, test);
 requestAnimationFrame(frame);
+// #shot: no overlay, the bot rides straight away — for screenshots (with #tod=…)
+if (/shot/.test(hash)) {
+  document.getElementById('ui')!.style.display = 'none';
+  startRide(0.9);
+}
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
@@ -236,5 +257,17 @@ if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__fala =
   get game() { return game; }, camera, renderer, BAL, loadStats,
   auto: (skill: number | null) => { auto = skill === null ? null : new Bot(skill, makeRng(7)); },
   start: () => startRide(),
-  freeze: (on: boolean) => { frozen = on; },
+  freeze: (on: boolean) => { frozen = on; fade = fadeTarget; },
+  /** fix the time of day (0 dawn, 0.25 noon, 0.5 sunset, 0.75 night) or `null` for the ride's clock */
+  tod: (p: number | keyof typeof PHASES | null) => { todFixed = p === null ? null : typeof p === 'number' ? p : PHASES[p]; },
+  /** hide the DOM overlay (HUD, screens) for clean screenshots */
+  hud: (on: boolean) => { document.getElementById('ui')!.style.display = on ? '' : 'none'; },
+  resume: () => resume(),
+  /** put the surfer `lead` wall heights ahead of the break (to look at the lip and whitewater) */
+  peek: (lead: number) => {
+    const H = game.wave.H(game.wave.xb);
+    game.x = game.wave.xb + lead * H;
+    game.y = 0.5 * H;
+    camera.update(game, canvas.clientWidth, canvas.clientHeight, 0, true);
+  },
 };
