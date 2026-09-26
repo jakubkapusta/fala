@@ -303,6 +303,8 @@ export class Ui {
     this.botTag.classList.remove('show');
     this.close.classList.remove('show');
     this.tubeEl.classList.remove('show');
+    this.hintEl.classList.remove('show');
+    this.hintT = 0;
     this.danger.style.opacity = '0';
   }
 }

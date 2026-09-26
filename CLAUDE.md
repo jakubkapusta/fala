@@ -4,7 +4,7 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **Now: M3** (full ride: all section types, tube, obstacles and helpers, shells, scoring, sound, hints).
+- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 (full ride) in progress:** first complete version pushed 2026-09-26 — steep and tube sections, obstacles, helpers, shells, tube scoring, sound, first-time hints. Waiting for the owner's phone test.
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
 
@@ -45,8 +45,9 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 
 - World units, **y up**. x runs along the wave (the surfer goes right), y is height on the wall: 0 = trough, `H(x)` = crest (130–160 flat, 200–250 open, 210–270 closeout). Game time ≠ real time: `BAL.tempo` (game s per real s) scales the whole simulation without changing trajectories; the camera and the sim convert to real seconds.
 - `src/game/balance.ts` — `BAL`, every number of the ride. New rule number → add a knob here.
-- `src/game/wave.ts` — sections (open / flat / close) generated from the seed, blended height and breaking speed, the break point `xb` advancing at `vb`, `pocket(x)` (power by distance ahead of the break) and `power(x, y)` (pocket × height bump), difficulty ramp by break travel.
+- `src/game/wave.ts` — sections (open / flat / close / steep / tube) generated from the seed (never the same special kind twice in a row, no tube right after a closeout); `barrel(x)` 0..1 on tube sections, blended height and breaking speed, the break point `xb` advancing at `vb`, `pocket(x)` (power by distance ahead of the break) and `power(x, y)` (pocket × height bump), difficulty ramp by break travel.
 - `src/game/game.ts` — one ride: modes `ride` / `air` / `wipe` / `gone`, one input `held`. Riding: heading turns towards `headDown` (held) / `headUp` (released); speed from gravity along the face, a small straight-line `push`, and the **pump drive** (see below); launch off the lip, spin in the air, landing graded against `refAngle()`, wipeout, swallowed when `x < xb − swallow·H`. Score = metres + trick points × multiplier.
+- `src/game/things.ts` — things on the wave, placed per section from the seed (`Things.populate`): obstacles (rock low, log/buoy high, `rider` = another surfer in a low or high band moving at 0.85·vb, jelly low), helpers (dolphin swims at `dolphinSpeed`, pelican above the crest), shells in lines / arcs over the crest / low lines through barrels. Face things keep `h = y/H`. Extra dolphins appear ahead when the player's lead drops below `lowLead`. No obstacles in the first `clear` units, in closeouts or in tubes.
 - `src/game/camera.ts` — adaptive framing: fits wall + flight apex, `lookAhead` real seconds ahead, the break behind; largest zoom that fits all three; springs on zoom and offsets only.
 - `src/game/input.ts` — one button: any pointer down / space / ArrowDown = held; Esc = pause.
 - `src/game/tuning.ts` — **M1 feel presets** picked in the menu ("Ustawienia testowe"): tempo, turn rate, heading angle, airs, perfect-landing window. Each option overrides a few `BAL` knobs; the defaults there must equal the values in `balance.ts` (the sim and ride-length balance use `balance.ts`). The choice is saved in `fala.meta.v1` (`test`) and logged with every ride in `fala.stats.v1`.
@@ -56,6 +57,23 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - `src/render/daycycle.ts` — time-of-day palette from keyframes (`palette(phase)`: 0 dawn, 0.25 noon, 0.4 golden, 0.5 sunset, 0.66–0.88 night).
 - `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close, the button indicator at the bottom showing the pumping rhythm), pops, menu ("Zobacz, jak jeździ bot" = watch the bot, touch to take over; M1 feel preset chips; the menu scrolls and goes two-column in landscape), pause, end screen with "Jeszcze raz" (< 1 s after the swallow). Bot rides don't set records.
 - `src/sim/bot.ts` + `scripts/sim.ts` — the player model and the simulator.
+
+## M3 rules (full ride)
+
+- **Tube** (`BAL.tube`): on tube sections the lip covers the wall from the break up to `reach` (3.8) H ahead; `barrel(x)` ramps up over `mouth` H from the barrel's front, and the lip's lower edge (`Game.ceiling`) comes down from 1.1 to `hi` (0.66) with it, so a surfer caught high has time to drop. Above ceiling + `hitMargin` → wipeout (cause `lip`); below `lo` → foam drag. Inside (`barrel > 0.5`): `ptsPerSec` × mult, and riding out after `minTime` → `exit` × mult and +1 multiplier (event `tubeOut`). Tube sections break a bit faster (vb 390) so the barrel catches the surfer; a good player with a big lead can still outrun it.
+- **Collisions** (`Game.touch`): circle vs circle with `things.r` + `surferR`. Rock / log / buoy / rider → wipeout with that cause (riding or in the air). Jelly → speed ×`stingKeep`. Shell → `shells++`. Pelican (in the air only) → vertical speed ≥ `pelicanVy` + points. Dolphin within `dolphinRange` H → `dolphinPush` for up to `dolphinTime` s.
+- Events: `wipe` has a `cause`; new `sting`, `shell`, `dolphin`, `pelican`, `tubeIn`, `tubeOut`. `Game.obstacleAhead(t)` for the bot, the camera (breathes out before obstacles) and hints.
+- Shells are currency (saved as `meta.shells`, for M4 boards), not points.
+- Bot: notices an obstacle with probability 0.55 + 0.43·skill, then passes above low things / below high ones, anticipating its climb by its reaction time; on and before tube sections it keeps under the lip.
+- Sim prints a second line per skill: wipe causes, tube time/exits, shells, dolphins, pelicans, stings. Current: ~55 / 138 / 246 s, 60 % of skill-0.9 rides reach night.
+
+## Sound (`src/audio/audio.ts`)
+
+Web Audio, all synthesized; starts on the first pointer/key gesture, suspends when the page is hidden. Beds: brown-noise wave (by wall height), band-passed hiss (by speed and crouch), low rumble of the break (by lead). A low-pass on beds + effects muffles everything inside a barrel. One-offs: splash, scrape, whoosh on launch / tube exit, pluck (clean), chord + bell (perfect), shell pings climbing a pentatonic scale, dolphin whistle, gull FM chirps (day). Music: detuned-triangle pads, a chord every 7.5 s, major loop by day, minor at night. Toggle: speaker icon in the menu corner and a button in pause (`meta.sound`).
+
+## Hints
+
+`hints()` in `main.ts`: first-time tips from wave data (air, closeout, tube, rock, high log/buoy, rider, jellyfish, dolphin, pelican, shells), one at a time, stored in `fala.hints.v1`, never while the bot rides.
 
 ## Pumping model (the heart of M1)
 
@@ -94,8 +112,9 @@ Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill
 - **Surfer** (`src/render/surfer.ts`): silhouette on a 2D skeleton with two-bone IK — crouch from `g.crouch`, surf stance (back knee towards the front foot), balance sway, rail grab in the air, body tumbling off the board on a wipeout. Rim light on the side facing the sun/moon. Drawn into its own target (`fg`) and laid over the bloomed scene in the composite, so a bright sun behind can't wash it out (owner's feedback after the first M2 build). Trail = foam line that sinks and fades.
 - Lower face (owner: "looked flat"): lines of old foam drawn up the wall, darker trough, stronger ripples; the trough reflects the wall above.
 - Performance: render scale capped at 1.5 device px per css px × `quality` (0.5–1, lowered by `adapt()`); `quality` also scales particles and turns off the finest ripple octave. Measured on the dev Mac (Apple M1): ~2.2 ms GPU per frame at 1218×563. Not measured on a real mid-range phone yet.
-- Dev: `__fala.tod('sunset' | 0.5 | null)`, `__fala.hud(false)`, `__fala.peek(0.3)` (jump next to the break), `__fala.freeze(true)`; URL `#tod=night`, `#shot` (no overlay, the bot rides — also works in production).
-- Not done yet (M3+/M5): sound, tubes as gameplay, obstacles, storm, lightning, spots.
+- Dev: `__fala.tod('sunset' | 0.5 | null)`, `__fala.hud(false)`, `__fala.peek(0.3)` (jump next to the break), `__fala.freeze(true)`, `__fala.start(56)` (fixed seed; 56 has an early tube), `__fala.spawn('rock', 200, 0.06)`; URL `#tod=night`, `#shot` (no overlay, the bot rides — also works in production).
+- Barrel in the shader: `u_tube` + row 1 of the column texture (tube, steep). Things are drawn by `src/render/things.ts` (scene) and other surfers by `drawRiders` (surfer layer).
+- Not done yet (M5): storm, lightning, spots.
 
 ## Known issues / loose ends
 
