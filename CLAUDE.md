@@ -4,7 +4,7 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0 done, M1 done** (accepted by the owner 2026-09-26). **Next: M2 — wait for the owner's go** before starting it. Milestones and acceptance criteria are in `docs/PLAN.md`; the supervisor/owner checks the result after each one.
+- **M0 done, M1 done** (accepted by the owner 2026-09-26). **M2 (the water) in progress** since 2026-09-26: first version pushed (415b950), waiting for the owner's phone feedback. Milestones and acceptance criteria are in `docs/PLAN.md`; the supervisor/owner checks the result after each one.
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
 
@@ -51,7 +51,9 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - `src/game/input.ts` — one button: any pointer down / space / ArrowDown = held; Esc = pause.
 - `src/game/tuning.ts` — **M1 feel presets** picked in the menu ("Ustawienia testowe"): tempo, turn rate, heading angle, airs, perfect-landing window. Each option overrides a few `BAL` knobs; the defaults there must equal the values in `balance.ts` (the sim and ride-length balance use `balance.ts`). The choice is saved in `fala.meta.v1` (`test`) and logged with every ride in `fala.stats.v1`.
 - `src/game/save.ts` — `fala.meta.v1`, `fala.stats.v1` (every ride), `fala.hints.v1`; all storage access in try/catch.
-- `src/render/renderer.ts` — scene → bloom → composite. **M1: placeholder world** drawn with `shapes.ts` (flat triangles, premultiplied linear colours; `glow()` = additive). Visual-only randomness uses the renderer's own RNG.
+- `src/render/renderer.ts` — world pass → shapes (trail, rings, surfer) → soft sprites (spray, mist, drops) → bloom → composite. Fills the per-column wave texture every frame. Visual-only randomness uses the renderer's own RNG.
+- `src/render/shaders.ts` — `WORLD_FS` (the whole world per pixel, see "Rendering"), sprites, flat shapes, bloom, composite.
+- `src/render/daycycle.ts` — time-of-day palette from keyframes (`palette(phase)`: 0 dawn, 0.25 noon, 0.4 golden, 0.5 sunset, 0.66–0.88 night).
 - `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close, the button indicator at the bottom showing the pumping rhythm), pops, menu ("Zobacz, jak jeździ bot" = watch the bot, touch to take over; M1 feel preset chips; the menu scrolls and goes two-column in landscape), pause, end screen with "Jeszcze raz" (< 1 s after the swallow). Bot rides don't set records.
 - `src/sim/bot.ts` + `scripts/sim.ts` — the player model and the simulator.
 
@@ -81,14 +83,18 @@ BAL='{"wave":{"open":{"vb":210}}}' npm run sim  # try knobs without editing
 
 Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s (deliberately easier now), closeouts passable with good play. Current (default presets = the owner's pick: tempo 1.2, turn 210°/s, headings −46°/+42°, high airs): about 56 s / 140 s / 266 s (perfect window "średnie"), ~half of skill-0.9 rides reach night. Other presets change ride length (faster = shorter); rebalance once the owner picks. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 1.2 — changing `tempo` rescales real ride times.
 
-## Notes for M2 (the water) — what exists and what to replace
+## Rendering (M2)
 
-- Everything in `drawWorld()` in `renderer.ts` is **placeholder**: sky gradient + sun blob (`SKY_FS`), far sea band with a horizon at 0.5 H, the face as flat-coloured quads (3 rows: trough / power line / crest, brighter with `pocket`), streak lines, crest line + blinking white mane on closeouts, the break as a curled stroke + foam pile + bubbles, water in front, trail, spray sparks (renderer-side, visual RNG), landing rings, stick-figure surfer with a rim. M2 replaces the face/lip/foam/sky/background with the real water shader, keeps the gameplay reads: pocket brightness, closeout mane, break/foam, trail.
-- **The view is anisotropic in portrait:** `camera.ey` (up to 1.4) scales y. Any new geometry/shader must use `u_view` = (cam x, cam y, 2/cam.w, 2/cam.h) where `cam.h` already includes `ey`; anything that must look round/uniform (surfer, particles, line widths, sun disc) must compensate like `Shapes` does. The surfer figure is built in screen proportions (`drawSurfer`), board angle mapped `atan2(sin·ey, cos)`.
-- Wave data the shader can use: `wave.H(x)`, `wave.slope(x)`, `wave.pocket(x)` (0 at/behind the break, full within 1.2 H ahead, 0 at 5 H), `wave.sectionAt(x).kind`, `wave.xb` (break), `wave.vb`. Typical lead ahead of the break is 2.3–3.2 H, so the break is often off-screen (camera shows at most `maxBehind` = 1 H behind the surfer); the mini preview and the left-edge darkening carry the chase. Consider how the lip/curl reads when it *is* on screen.
-- Post chain already there (from Rój): bloom (5 levels, threshold 0.8), composite with ACES, grain, vignette, chromatic aberration, shockwave (used on perfect landings). `safe()` on HDR inputs. Adaptive quality: `adapt()` in `main.ts` lowers `renderer.quality` (render scale 0.5–1) on slow frames — extend it to mesh density / particle count in M2.
-- Day cycle, night bioluminescence, storm, time-of-day palettes: not started (M2/M5). Plan: full cycle ≈ 6 min of riding, ride starts at a random time of day; skill-0.9 rides reach night (> 240 s) about half the time.
-- Not started (M3+): audio (none at all yet), tubes, obstacles/helpers, shells, proper hints, `#stats` view, spots, missions, boards, daily wave.
+- **One fullscreen pass draws the world** (`WORLD_FS`): sky (gradient, sun, moon, stars, clouds), the flat sea in perspective (behind the wave above the whitewater, and in front of it below y = 0), the wave face, the lip/tube just behind the break, the whitewater pile, mist. Wave shape along x arrives as a 256×1 RGBA16F texture of columns (H, pocket, closeout-ness, flat-ness) spanning the view; `u_xb` is the break. No mesh — the plan's "mesh density" knob is the render scale + `u_detail`.
+- Geometry of the backdrop: the eye is `HZ` (55) above the water and `D0` (2600) from the wave; `z = HZ·D0/(HZ − y)` gives depth of a water pixel. Reflections in the front sea test whether the mirrored ray hits the wave (`massTop`) and use `faceLite`, else the sky + sun/moon glint.
+- Face: profile normal from flat (trough) to vertical to overhanging (pocket, `steep` from pocket/closeout), ripples as texture lines along the wave, Fresnel reflection (low on the face it reflects the wall above), **translucency** = `transmit(thickness) × backLight × backLobe`: the lip's edge is paper-thin (passes the light's own colour, gold at sunset), thicker water turns turquoise; `backLobe` is a hot spot under the sun/moon's screen x. Crest rim, mane (feathering near the break, thick and pulsing on closeouts), spume at the foot.
+- Behind the break (`d = xb − x`): 0…0.6H the curtain falling from the crest and the tube under its edge (the face darkened — pocket is taken at `xb` there, otherwise a seam), then whitewater (`foamTop`, fbm billows) that bursts in from the bottom and the crest, a foam skirt spreading in front, mist above.
+- Noise in the world shader comes from a mipmapped 256² R8 random texture (`vnoise` = one fetch; mips kill shimmer far away). Stars use `hash12`.
+- Time of day: a ride starts at phase 0…0.12 (dawn → morning) and advances by real ride time (`DAY_S` = 360 s), so night (≥ 0.62) comes after ~200–240 s — the reward of a long ride. The menu demo starts at any phase. Night: bioluminescent foam, trail and spray.
+- Surfer rim light takes the colour of the light behind the wave. Trail = foam line that sinks and fades.
+- Performance: render scale capped at 1.5 device px per css px × `quality` (0.5–1, lowered by `adapt()`); `quality` also scales particles and turns off the finest ripple octave. Measured on the dev Mac (Apple M1): ~2.2 ms GPU per frame at 1218×563. Not measured on a real mid-range phone yet.
+- Dev: `__fala.tod('sunset' | 0.5 | null)`, `__fala.hud(false)`, `__fala.peek(0.3)` (jump next to the break), `__fala.freeze(true)`; URL `#tod=night`, `#shot` (no overlay, the bot rides — also works in production).
+- Not done yet (M3+/M5): sound, tubes as gameplay, obstacles, storm, lightning, spots.
 
 ## Known issues / loose ends
 
