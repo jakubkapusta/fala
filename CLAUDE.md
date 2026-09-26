@@ -4,9 +4,16 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 (full ride) in progress:** first complete version pushed 2026-09-26 — steep and tube sections, obstacles, helpers, shells, tube scoring, sound, first-time hints. Waiting for the owner's phone test.
+- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **Now: M4** — decisions below.
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
+
+### M4 decisions (owner, 2026-09-26)
+
+- Spots have **levels**: 6 per spot to start, 60–90 s each, a finish line, fixed seed per level, 3 stars per level. **Stars are the missions** (they replace the plan's 15 missions per spot and the surfer level). Stars count only when the level is finished and are kept per goal across attempts.
+- Levels unlock in order. **Finishing level 5 unlocks the next spot.** **Level 6 (bonus, harder) needs 10 of the 15 stars of levels 1–5** in that spot.
+- **Endless** (the M3 ride, ends only when swallowed) stays, per spot, with its own record; the daily wave is an endless ride on a date seed (one counted attempt).
+- Shells stay the currency for boards and looks.
 
 ### Feel locked with the owner in M1 (keep unless they ask)
 
