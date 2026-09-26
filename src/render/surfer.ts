@@ -29,8 +29,9 @@ function ik(a: V, b: V, l1: number, l2: number, side: number): V {
 }
 
 // board outline (u along the board, v up; deck at v = 0) and the fin
-const BOARD = [-0.34, -0.06, 0, -0.07, 0.28, -0.045, 0.38, 0.018, 0.28, 0.006, 0, 0, -0.34, -0.006];
-const FIN = [-0.3, -0.06, -0.21, -0.062, -0.285, -0.14];
+// a shortboard a bit longer than the surfer is tall, with nose rocker
+const BOARD = [-0.52, -0.075, -0.2, -0.092, 0.25, -0.086, 0.5, -0.052, 0.64, 0.03, 0.5, 0.012, 0.2, 0, -0.2, 0, -0.52, -0.01];
+const FIN = [-0.47, -0.078, -0.35, -0.086, -0.45, -0.18];
 
 export function drawSurfer(sh: Shapes, g: Game, cam: Camera, P: Palette, time: number, lightX: number) {
   const px = 1 / cam.scale;
@@ -49,7 +50,7 @@ export function drawSurfer(sh: Shapes, g: Game, cam: Camera, P: Palette, time: n
     let c = air ? 0.8 : g.crouch;
     const lean = air ? 1.05 : 0.28 + 0.5 * c;
     const hipH = air ? 0.24 : lerp(0.41, 0.27, c);
-    let fB: V = [-0.19, 0], fF: V = [0.16, 0];
+    let fB: V = [-0.21, 0], fF: V = [0.17, 0];
     let hip: V = [0.02 * c, hipH];
     const body = wipe ? 1 : 0;
     let armF: V, armB: V;
@@ -134,13 +135,13 @@ export function drawSurfer(sh: Shapes, g: Game, cam: Camera, P: Palette, time: n
   const ox2 = lx * rim * 0.6, oy2 = (ly * rim * 0.6) / e;
   // a faint outline all round, then the lit edge, then the silhouette
   drawParts(rim * 0.8, 0, 0, EDGE);
-  sh.poly(polyW(BOARD, 0, 0), EDGE);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) sh.poly(polyW(BOARD, dx * rim * 0.4, (dy * rim * 0.4) / e), EDGE);
   drawParts(rim, ox2, oy2, RIM);
   sh.poly(polyW(BOARD, ox2 * 1.5, oy2 * 1.5), RIM);
   sh.poly(polyW(FIN, 0, 0), INK);
   sh.poly(polyW(BOARD, 0, 0), RAIL);
   // deck: the top two thirds of the board's thickness
-  const deck = [-0.33, -0.024, 0.27, -0.016, 0.365, 0.016, 0.28, 0.006, 0, 0, -0.33, -0.006];
+  const deck = [-0.51, -0.034, -0.2, -0.04, 0.25, -0.036, 0.5, -0.012, 0.62, 0.026, 0.5, 0.012, 0.2, 0, -0.2, 0, -0.51, -0.01];
   sh.poly(polyW(deck, 0, 0), DECK);
   drawParts(0, 0, 0, INK);
 }
