@@ -4,7 +4,7 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **M4 accepted** 2026-09-26 (balance OK for now). **Now: M5** — storm, full bioluminescence, slow motion emphasis, tube-exit spray, weak-phone performance, offline check. **No photo mode** (owner: not needed).
+- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **M4 accepted** 2026-09-26 (balance OK for now). **Now: M5** — storm, full bioluminescence, slow motion emphasis, tube-exit spray, weak-phone performance, offline check. **No photo mode** (owner: not needed). First M5 version pushed 2026-09-26, waiting for the owner's test.
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
 
@@ -77,6 +77,15 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - **UI**: menu (stars/shells wallet, Płyń → spots → levels with goals and a Płyń button / Bez końca, Fala dnia, Deski i wygląd, bot; the M1 test chips folded under "Ustawienia testowe"), level intro card with the goals, pause shows goal progress, end screens per ride kind (stars pop, goals ✓, unlock badges, Dalej / Jeszcze raz / Poziomy). HUD: level progress bar, finish line in the preview and on the wave (floats + checkered flag).
 - Saved in `fala.meta.v1`: `spots`, `board`, `owned`, `suit`, `trail`, `daily`, `lastSpot` (added with defaults; old saves load fine).
 - Dev: `__fala.level('bali', 2)`, `__fala.meta`.
+
+## M5: storm, glow, polish
+
+- **Storm** (`BAL.wave.storm`): sections carry `storm` 0/1 from their own random stream (`stormRng`, so storms never reshuffle a level's sections); a chance per section once difficulty ≥ `from`, lasting `len` sections; walls ×`H`, break ×`vb`. Nazaré: always stormy (chance 1, no extra height — its waves are giant already). `wave.stormAt(x)`; event `storm` (pop + first-time hint). Renderer eases a storm factor at the camera: dark sky, dark green water, dimmer sun and backlight, more clouds, rain streaks in the world shader (`u_rain`), lightning (random while storm > 0.5: `u_flash` flicker + a jagged bolt drawn with shapes down to the crest) and thunder after a delay (`renderer.onThunder` → `sound.thunder`); rain noise bed.
+- **Bioluminescence**: `u_bio` = night × `look.bio` (Zatoka 1.8): foam, mane, whitewater and the foot of the wall glow blue, sparkles on the water in front; trail, spray and jellyfish glow as before.
+- **Slow motion** after a big perfect landing: stronger aberration, slight darkening, sound half-muffled.
+- **Tube exit**: a burst of spray and mist (`renderer.tubeBurst`).
+- **Weak phones**: start at quality 0.75 when ≤ 4 cores or ≤ 3 GB memory; below quality 0.7 bloom uses 3 levels instead of 5.
+- **Offline** verified on the built site: load once, stop the server, reload → the game runs from the service worker. The SW matches the cache with `ignoreVary` (vite preview sends `Vary: Origin` and module scripts are requested with an Origin header).
 
 ## M3 rules (full ride)
 

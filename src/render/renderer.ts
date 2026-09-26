@@ -62,6 +62,14 @@ export class Renderer {
   /** the spot's look and the player's gear */
   look: Look | null = null;
   gear: { board: Board; suit: Suit; trail: Trail } = { board: BOARDS[0], suit: SUITS[0], trail: TRAILS[0] };
+  /** storm at the camera (eased), lightning */
+  private storm = 0;
+  private flashT = 9;
+  private slowK = 0;
+  private bolt: { x: number; seed: number } | null = null;
+  private thunderIn = -1;
+  /** called when thunder should sound (strength 0..1) */
+  onThunder: ((k: number) => void) | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
@@ -154,6 +162,57 @@ export class Renderer {
     }
   }
 
+  /** Lightning now and then in a storm; thunder follows after a delay. */
+  private lightning(dt: number, cam: Camera) {
+    this.flashT += dt;
+    if (this.storm > 0.5 && this.flashT > 1.5 && this.r() < dt * 0.14) {
+      this.flashT = 0;
+      this.bolt = { x: cam.x + (this.r() - 0.2) * cam.w * 0.8, seed: this.r() * 1000 };
+      this.thunderIn = 0.3 + this.r() * 1.4;
+    }
+    if (this.thunderIn >= 0) {
+      this.thunderIn -= dt;
+      if (this.thunderIn < 0) this.onThunder?.(this.storm);
+    }
+  }
+
+  private drawBolt(cam: Camera, g: Game) {
+    if (this.bolt && this.flashT < 0.25) {
+      // a jagged bolt from the clouds down to the crest
+      const sh = this.shapes, px = 1 / cam.scale;
+      let x = this.bolt.x, y = cam.y + cam.h / 2 + 10;
+      const bottom = g.wave.H(this.bolt.x) * 1.02;
+      let i = 0;
+      const k = this.flash();
+      while (y > bottom && i < 30) {
+        const s = this.bolt.seed + i++;
+        const nx = x + Math.sin(s * 12.9898) * 0.5 * cam.w * 0.05, ny = y - (cam.h * 0.04 + Math.abs(Math.sin(s * 78.233)) * cam.h * 0.05);
+        sh.line(x, y, nx, Math.max(ny, bottom), 5 * px, glow(0.5, 0.6, 1, 0.5 * k));
+        sh.line(x, y, nx, Math.max(ny, bottom), 1.8 * px, glow(1.2, 1.25, 1.4, 1.2 * k));
+        x = nx; y = ny;
+      }
+    }
+  }
+
+  /** Lightning flash brightness: a few flickers over a third of a second. */
+  private flash() {
+    const t = this.flashT;
+    if (t > 0.4) return 0;
+    const f = t < 0.06 ? 1 : t < 0.1 ? 0.2 : t < 0.16 ? 0.8 : Math.max(0, 0.5 - (t - 0.16) * 2);
+    return f * 0.9 * this.storm;
+  }
+
+  /** Out of the barrel: a burst of spray and mist. */
+  tubeBurst(x: number, y: number) {
+    for (let i = 0; i < 40 * this.quality; i++) {
+      const a = Math.PI * (-0.15 + this.r() * 0.75), sp = 150 + this.r() * 320;
+      this.add(x - 20, y + this.r() * 20, Math.cos(a) * sp, Math.sin(a) * sp, 0.5 + this.r() * 0.5, 2 + this.r() * 3.5, 'spray', 500);
+    }
+    for (let i = 0; i < 12 * this.quality; i++) {
+      this.add(x - 30 - this.r() * 60, y + this.r() * 40, 80 + this.r() * 140, 20 + this.r() * 60, 1 + this.r() * 0.8, 20 + this.r() * 25, 'mist', 0);
+    }
+  }
+
   /** A collected shell: a burst of golden sparks. */
   sparkle(x: number, y: number) {
     for (let i = 0; i < 10 * this.quality; i++) {
@@ -167,7 +226,7 @@ export class Renderer {
     this.parts.push({ x, y, vx, vy, life: 0, max, size, kind, g });
   }
 
-  render(g: Game, cam: Camera, opts: { fade: number; dt: number; phase: number }) {
+  render(g: Game, cam: Camera, opts: { fade: number; dt: number; phase: number; slow?: number }) {
     const gl = this.gl;
     this.resize();
     this.t += opts.dt;
@@ -177,6 +236,16 @@ export class Renderer {
       const mul = (a: number[], m: number[]) => { a[0] *= m[0]; a[1] *= m[1]; a[2] *= m[2]; };
       mul(P.deep, L.deep); mul(P.scat, L.scat); mul(P.top, L.sky); mul(P.hor, L.sky); mul(P.cloud, L.sky);
     }
+    // storm: dark sky, dark green water, rain and lightning
+    this.storm += (g.wave.stormAt(cam.x) - this.storm) * Math.min(1, opts.dt * 0.8);
+    const st = this.storm;
+    if (st > 0.01) {
+      const mix = (a: number[], b: number[], k: number) => { for (let i = 0; i < 3; i++) a[i] += (b[i] - a[i]) * k; };
+      mix(P.top, [0.03, 0.04, 0.045], 0.8 * st); mix(P.hor, [0.12, 0.14, 0.14], 0.75 * st); mix(P.cloud, [0.2, 0.22, 0.23], 0.8 * st);
+      mix(P.deep, [0.006, 0.022, 0.018], 0.7 * st); mix(P.scat, [0.04, 0.2, 0.14], 0.6 * st);
+      for (let i = 0; i < 3; i++) { P.sun[i] *= 1 - 0.85 * st; P.amb[i] *= 1 - 0.35 * st; P.back[i] *= 1 - 0.6 * st; }
+    }
+    this.lightning(opts.dt, cam);
     this.stepFx(g, cam, opts.dt);
 
     this.scene.bind();
@@ -189,6 +258,7 @@ export class Renderer {
     this.drawTrail(g, cam, P);
     drawThings(sh, (x, y, size, hard, r, gg, b, a) => this.sprite(x, y, size, hard, r, gg, b, a), g, cam, P, this.t);
     this.drawRings(cam);
+    this.drawBolt(cam, g);
     sh.buf.upload();
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -216,14 +286,16 @@ export class Renderer {
 
     // shockwave from the latest perfect landing
     let shock: [number, number, number, number] = [0, 0, 0, 0];
-    let ca = 0.0004;
+    // slow motion after a big trick: the image tightens (aberration, vignette through the fade)
+    this.slowK += ((opts.slow ?? 0) - this.slowK) * Math.min(1, opts.dt * 8);
+    let ca = 0.0004 + this.slowK * 0.004;
     const f = this.flashes.find((q) => q.kind === 'perfect');
     if (f) {
       const k = clamp(f.t / 0.6, 0, 1);
       shock = [(f.x - cam.x) / cam.w + 0.5, (f.y - cam.y) / cam.h + 0.5, k * 0.5, (1 - k) * (1 - k)];
       ca += (1 - k) * 0.004;
     }
-    this.post(opts.fade, shock, ca);
+    this.post(Math.max(opts.fade, this.slowK * 0.12), shock, ca);
   }
 
   // ------------------------------------------------------------ world
@@ -256,7 +328,8 @@ export class Renderer {
       .f3('u_sun', P.sunX, P.sunY, sunVis).f3('u_moon', P.moonX, P.moonY, P.moon)
       .f1('u_backX', sunVis > 0.2 ? P.sunX : P.moonX).f1('u_night', P.night)
       .f3('u_tube', BAL.tube.reach, BAL.tube.mouth, BAL.tube.hi)
-      .f1('u_clouds', this.look?.clouds ?? 0).f1('u_aurora', this.look?.aurora ?? 0).f1('u_reef', this.look?.reef ?? 0)
+      .f1('u_rain', this.storm).f1('u_flash', this.flash()).f1('u_bio', P.night * (this.look?.bio ?? 1))
+      .f1('u_clouds', Math.min(1, (this.look?.clouds ?? 0) + this.storm * 0.9)).f1('u_aurora', this.look?.aurora ?? 0).f1('u_reef', this.look?.reef ?? 0)
       .f4('u_land', this.look?.land.h ?? 0, this.look?.land.rough ?? 0, this.look?.land.from ?? 0, this.look?.land.to ?? 1).f1('u_landPeak', this.look?.land.peak ?? 0.5);
     this.fullscreen();
   }
@@ -393,7 +466,9 @@ export class Renderer {
   private post(fade: number, shock: [number, number, number, number], ca: number) {
     const gl = this.gl;
     let src = this.scene;
-    for (let i = 0; i < this.bloom.length; i++) {
+    // fewer (wider) bloom levels when frames are slow
+    const levels = this.quality < 0.7 ? 3 : this.bloom.length;
+    for (let i = 0; i < levels; i++) {
       const dst = this.bloom[i];
       dst.bind();
       this.pDown.use().tex('u_src', 0, src.tex).f2('u_texel', 1 / src.w, 1 / src.h).f1('u_pre', i === 0 ? 1 : 0).f1('u_thresh', 0.9);
@@ -402,7 +477,7 @@ export class Renderer {
     }
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
-    for (let i = this.bloom.length - 1; i > 0; i--) {
+    for (let i = levels - 1; i > 0; i--) {
       const from = this.bloom[i], to = this.bloom[i - 1];
       to.bind();
       this.pUp.use().tex('u_src', 0, from.tex).f2('u_texel', 1 / from.w, 1 / from.h).f1('u_amt', 1);

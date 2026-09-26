@@ -28,6 +28,8 @@ export type Look = {
   land: { h: number; rough: number; from: number; to: number; peak?: number };
   aurora: number;
   reef: number;
+  /** bioluminescence strength at night (1 = normal) */
+  bio?: number;
 };
 
 export type Spot = {
@@ -109,7 +111,7 @@ export const SPOTS: Spot[] = [
     id: 'zatoka', name: 'Zatoka', blurb: 'Zawsze noc. Woda świeci, meduzy też.',
     day: 0.76,
     bal: { wave: { diffStart: 0.2, open: { H: [185, 235] } }, things: { mix: { jelly: 6, rock: 1.5 }, helpers: [0.25, 0.14] } },
-    look: { deep: [0.8, 0.9, 1.1], scat: [0.8, 1, 1.2], sky: [0.9, 0.95, 1.1], clouds: 0.05, land: { h: 0.14, rough: 0.5, from: 0.2, to: 0.8, peak: 0.5 }, aurora: 0, reef: 0.5 },
+    look: { deep: [0.8, 0.9, 1.1], scat: [0.8, 1, 1.2], sky: [0.9, 0.95, 1.1], clouds: 0.05, land: { h: 0.14, rough: 0.5, from: 0.2, to: 0.8, peak: 0.5 }, aurora: 0, reef: 0.5, bio: 1.8 },
     levels: [
       { seed: 401, meters: 950, bal: merge({}, { wave: { script: 'o o f o t o o' } }), goals: G('shells:20 dolphin:1 perfect:2') },
       { seed: 402, meters: 1100, bal: merge({}, { wave: { script: 'o t o c o f o' } }), goals: G('nowipe tricks:3 shells:25') },
@@ -122,7 +124,7 @@ export const SPOTS: Spot[] = [
   {
     id: 'nazare', name: 'Nazaré', blurb: 'Gigantyczne fale pod klifem. Finał.',
     day: [0.3, 0.44],
-    bal: { wave: { diffStart: 0.3, open: { H: [290, 360], vb: 360 }, steep: { H: [340, 400], weight: 2.5, vb: 380 }, close: { H: [300, 380], weight: 2.2, vb: 560 }, tube: { H: [320, 380], vb: 440 }, flat: { H: [200, 240], vb: 280 } }, things: { obstacles: [0.3, 1.2] } },
+    bal: { wave: { diffStart: 0.3, open: { H: [290, 360], vb: 360 }, steep: { H: [340, 400], weight: 2.5, vb: 380 }, close: { H: [300, 380], weight: 2.2, vb: 560 }, tube: { H: [320, 380], vb: 440 }, flat: { H: [200, 240], vb: 280 }, storm: { chance: 1, from: 0, len: [99, 99], H: 1, vb: 1 } }, things: { obstacles: [0.3, 1.2] } },
     look: { deep: [0.75, 0.82, 0.85], scat: [0.7, 0.85, 0.85], sky: [0.62, 0.66, 0.72], clouds: 0.85, land: { h: 0.5, rough: 0.35, from: 0.68, to: 1, peak: 0.95 }, aurora: 0, reef: 0 },
     levels: [
       { seed: 501, meters: 1000, bal: merge({}, { wave: { script: 'o s o c o s o' } }), goals: G('shells:20 nowipe perfect:2') },

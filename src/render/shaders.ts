@@ -76,6 +76,10 @@ uniform vec4 u_land;
 uniform float u_landPeak;
 uniform float u_aurora;
 uniform float u_reef;
+// storm: rain 0..1, lightning flash; bioluminescence strength (night × spot)
+uniform float u_rain;
+uniform float u_flash;
+uniform float u_bio;
 out vec4 o;
 
 float asp, hzUv, pxY;
@@ -171,7 +175,7 @@ vec3 foamCol(vec2 wp, float shade){
   vec3 f = (u_amb * .8 + u_sunCol * u_sun.z * .04 + u_back * .12) * shade;
   // bioluminescence: breaking water glows blue at night
   float b = vnoise(wp * .035 + vec2(0., u_time * .9));
-  f += vec3(.03, .45, 1.1) * u_night * (.25 + b * b * 1.6) * shade;
+  f += vec3(.03, .45, 1.1) * u_bio * (.25 + b * b * 1.6) * shade;
   return f;
 }
 
@@ -243,6 +247,13 @@ vec3 waterPlane(vec2 wp, vec2 uv){
     body = mix(body, vec3(.05, .07, .035) * (.4 + u_amb) + u_scat * u_amb * .25, smoothstep(.48, .7, rn) * u_reef * .8);
   }
   vec3 c = mix(body, refl, fr);
+  // at night the water sparkles blue where it's stirred
+  if (u_bio > .05) {
+    vec2 sc = P * vec2(.045, .03) + vec2(0., t * .2);
+    float h = hash12(floor(sc));
+    float tw = .5 + .5 * sin(t * (3. + 5. * h) + h * 50.);
+    c += vec3(.06, .5, 1.2) * step(.975, h) * tw * smoothstep(.5, .1, length(fract(sc) - .5)) * u_bio * .7 * exp(-z / (u_d0 * 1.5));
+  }
   // haze towards the horizon
   return mix(c, u_hor, (1. - exp(-max(z - u_d0, 0.) / (u_d0 * 6.))) * .8);
 }
@@ -390,6 +401,22 @@ void main(){
     float sk = H * .12 * smoothstep(.4 * L, L, d) * exp(-max(d - L, 0.) / (4. * H));
     float n = vnoise(vec2(wp.x * .03 - u_time * .25, wp.y * .1));
     c = mix(c, whitewater(wp, H, sk) * .85, smoothstep(-sk * (.5 + .8 * n), 0., wp.y) * .9);
+  }
+  if (u_bio > .05 && wp.y < 0.) c += vec3(.04, .4, 1.) * u_bio * .35 * exp(wp.y / (H * .03));
+  // lightning lights up the sky and the wall
+  c += u_flash * vec3(.3, .33, .42) * (wp.y > top ? 1. : .35);
+  // rain: two layers of slanted streaks
+  if (u_rain > .01) {
+    float rn = 0.;
+    for (int i = 0; i < 2; i++) {
+      float sc = i == 0 ? 55. : 105.;
+      vec2 p = vec2(uv.x * asp * sc + uv.y * sc * .28, uv.y * sc * .09 + u_time * (i == 0 ? 3.2 : 4.6));
+      vec2 cell = floor(p), f = fract(p);
+      float h = hash12(cell + float(i) * 17.);
+      float x = f.x - (.2 + .6 * hash12(cell + 3.1 + float(i)));
+      rn += step(.7, h) * smoothstep(.07, 0., abs(x)) * smoothstep(0., .35, f.y) * smoothstep(1., .55, f.y) * (i == 0 ? 1. : .6);
+    }
+    c = mix(c, u_hor * .8 + vec3(.08), rn * u_rain * .35);
   }
   o = vec4(c, 1.);
 }`;

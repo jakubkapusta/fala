@@ -7,7 +7,8 @@ import { makeRng, type Rng } from '../core/rng';
 import { clamp, smoothstep } from '../core/math';
 
 export type SectionKind = 'open' | 'flat' | 'close' | 'steep' | 'tube';
-export type Section = { kind: SectionKind; x0: number; x1: number; H: number; vb: number; power: number };
+/** `storm`: 1 inside a storm (taller walls, faster break, rain and lightning) */
+export type Section = { kind: SectionKind; x0: number; x1: number; H: number; vb: number; power: number; storm: number };
 
 const SCRIPT: Record<string, SectionKind> = { o: 'open', f: 'flat', c: 'close', s: 'steep', t: 'tube' };
 const AHEAD = 9000; // generate this far ahead of the break
@@ -20,12 +21,16 @@ export class Wave {
   /** current breaking speed */
   vb = 0;
   private rng: Rng;
+  /** storms have their own random stream, so they never reshuffle a level's sections */
+  private stormRng: Rng;
+  private stormLeft = 0;
   private genX = -2000;
   private made = 0;
   private hint = 0;
 
   constructor(seed: number) {
     this.rng = makeRng(seed ^ 0x5eed);
+    this.stormRng = makeRng(seed ^ 0x570f);
     this.ensure(AHEAD);
     this.vb = this.vbAt(this.xb);
   }
@@ -68,7 +73,13 @@ export class Wave {
     }
     const k = W[kind];
     const len = r.range(k.len[0], k.len[1]);
-    const s: Section = { kind, x0: this.genX, x1: this.genX + len, H: r.range(k.H[0], k.H[1]), vb: k.vb, power: k.power };
+    // a storm now and then once the ride is under way (a stormy spot has one all the time)
+    const St = W.storm, sr = this.stormRng;
+    const rollStorm = sr();
+    if (this.stormLeft <= 0 && this.made >= W.warmup && d >= St.from && rollStorm < St.chance) this.stormLeft = Math.round(sr.range(St.len[0], St.len[1]));
+    const storm = this.stormLeft > 0 ? 1 : 0;
+    if (this.stormLeft > 0) this.stormLeft--;
+    const s: Section = { kind, x0: this.genX, x1: this.genX + len, H: r.range(k.H[0], k.H[1]), vb: k.vb, power: k.power, storm };
     this.sections.push(s);
     this.genX = s.x1;
     this.made++;
@@ -104,7 +115,13 @@ export class Wave {
 
   /** Wall height (y of the crest) at x. */
   H(x: number) {
-    return this.blended(x, (s) => s.H);
+    const k = BAL.wave.storm.H - 1;
+    return this.blended(x, (s) => s.H * (1 + k * s.storm));
+  }
+
+  /** 0..1 storm at x (blended at the edges). */
+  stormAt(x: number) {
+    return this.blended(x, (s) => s.storm);
   }
 
   /** Crest slope dH/dx. */
@@ -113,7 +130,8 @@ export class Wave {
   }
 
   vbAt(x: number) {
-    return this.blended(x, (s) => s.vb) * (1 + this.difficulty(x) * BAL.wave.vbRamp);
+    const k = BAL.wave.storm.vb - 1;
+    return this.blended(x, (s) => s.vb * (1 + k * s.storm)) * (1 + this.difficulty(x) * BAL.wave.vbRamp);
   }
 
   /** 0..1+ pocket strength at x: proximity to the break × section power. Drives pumping. */

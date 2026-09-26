@@ -31,6 +31,7 @@ export class Sound {
   private wave!: Bed;
   private hiss!: Bed;
   private rumble!: Bed;
+  private rain!: Bed;
   private chord = 0;
   private nextChord = 0;
   private nextGull = 4;
@@ -79,6 +80,7 @@ export class Sound {
     this.wave = this.bed(this.brown, 'lowpass', 520, 0.7);
     this.hiss = this.bed(this.white, 'bandpass', 3200, 0.9);
     this.rumble = this.bed(this.brown, 'lowpass', 150, 0.8);
+    this.rain = this.bed(this.white, 'highpass', 1400, 0.5);
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   }
 
@@ -112,7 +114,7 @@ export class Sound {
   }
 
   /** Pause / menu: quieter beds, no rider sounds. */
-  update(g: Game | null, dt: number, phase: number, active: boolean) {
+  update(g: Game | null, dt: number, phase: number, active: boolean, storm = 0, slow = 0) {
     const ctx = this.ctx;
     if (!ctx) return;
     this.t += dt;
@@ -129,14 +131,15 @@ export class Sound {
       const lead = g.lead;
       const close = Math.max(0, Math.min(1, (2.4 - lead) / 1.8));
       this.rumble.gain.gain.setTargetAtTime(active ? 0.06 + 0.5 * close * close : 0.03, now, 0.2);
-      // inside a barrel everything is muffled; it opens up on the way out
-      this.muffle.frequency.setTargetAtTime(g.inTube ? 650 : 18000, now, g.inTube ? 0.15 : 0.08);
+      // inside a barrel everything is muffled; it opens up on the way out (slow motion: half way)
+      this.muffle.frequency.setTargetAtTime(g.inTube ? 650 : slow > 0 ? 1600 : 18000, now, g.inTube || slow > 0 ? 0.15 : 0.08);
     } else {
       this.hiss.gain.gain.setTargetAtTime(0, now, k);
       this.rumble.gain.gain.setTargetAtTime(0.03, now, 0.3);
       this.wave.gain.gain.setTargetAtTime(0.12, now, 0.4);
       this.muffle.frequency.setTargetAtTime(18000, now, 0.1);
     }
+    this.rain.gain.gain.setTargetAtTime(0.1 * storm, now, 0.8);
     // music: a chord every few seconds
     if (this.t >= this.nextChord) {
       this.nextChord = this.t + 7.5;
@@ -191,6 +194,27 @@ export class Sound {
           break;
       }
     }
+  }
+
+  /** Thunder: a crack, then a long low roll. */
+  thunder(k: number) {
+    if (!this.ctx) return;
+    this.noise(0.25, 'bandpass', 2500, 600, 0.12 * k, 0.7);
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.brown;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    const now = ctx.currentTime;
+    f.frequency.setValueAtTime(400, now);
+    f.frequency.exponentialRampToValueAtTime(70, now + 3);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.9 * k, now + 0.15);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 3.2);
+    src.connect(f).connect(g).connect(this.amb);
+    src.start(now, Math.random());
+    src.stop(now + 3.3);
   }
 
   // ------------------------------------------------------------ voices

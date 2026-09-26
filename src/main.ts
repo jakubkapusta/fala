@@ -40,6 +40,12 @@ try {
   throw e;
 }
 
+// few cores / little memory: start at a lower render quality (adapt() still raises it if frames are quick)
+{
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  if ((nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 3) renderer.quality = 0.75;
+}
+
 const meta = loadMeta();
 const sound = new Sound();
 sound.enabled = meta.sound;
@@ -61,6 +67,7 @@ function layers(r: RideInfo) {
   renderer.gear = { board: boardById(meta.board), suit: suitById(meta.suit), trail: trailById(meta.trail) };
 }
 layers(ride);
+renderer.onThunder = (k) => { vibrate(Math.round(20 * k)); sound.thunder(k); };
 const camera = new Camera();
 let mode: Mode = 'menu';
 let game: Game;
@@ -311,11 +318,16 @@ function handleEvents(events: GameEvent[]) {
         break;
       case 'tubeOut':
         renderer.impact('perfect', game.x, game.y);
+        renderer.tubeBurst(game.x, game.y);
         ui.pop(`Z tuby!<small>${(e.secs / BAL.tempo).toFixed(1).replace('.', ',')} s · +${e.pts.toLocaleString('pl-PL')}</small>`, 'perfect');
         vibrate(20);
         break;
       case 'gone':
         vibrate(120);
+        break;
+      case 'storm':
+        ui.pop('Sztorm!', 'wipe');
+        hintOnce('storm', '<b>Sztorm</b> — wyższe fale i szybsze łamanie. Trzymaj prędkość');
         break;
       case 'finish':
         renderer.impact('perfect', game.x, game.y);
@@ -402,8 +414,9 @@ function frame(now: number) {
   fade += (fadeTarget - fade) * Math.min(1, dt * 4);
   if (mode !== 'pause' && game.mode !== 'gone') dayClock += dt;
   const phase = todFixed ?? dayStart + dayClock / DAY_S;
-  renderer.render(game, camera, { fade, dt, phase });
-  sound.update(game, dt, phase, mode === 'play');
+  const slow = game.slowT > 0 ? 1 : 0;
+  renderer.render(game, camera, { fade, dt, phase, slow });
+  sound.update(game, dt, phase, mode === 'play', game.wave.stormAt(game.x), slow);
   if (mode === 'play') adapt(raw);
   requestAnimationFrame(frame);
 }

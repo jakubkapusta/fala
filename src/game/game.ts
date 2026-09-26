@@ -23,7 +23,8 @@ export type GameEvent =
   | { t: 'recover' }
   | { t: 'scrape' }
   | { t: 'gone' }
-  | { t: 'finish' };
+  | { t: 'finish' }
+  | { t: 'storm' };
 
 export class Game {
   wave: Wave;
@@ -84,6 +85,7 @@ export class Game {
   private tubeAcc = 0;
   lastWipe: WipeCause | null = null;
   bestMult = 1;
+  inStorm = false;
   /** a level's finish line (0 = endless) */
   readonly finishX: number;
   /** remaining slow motion (game s); main.ts scales time while it runs */
@@ -150,6 +152,9 @@ export class Game {
       return;
     }
     this.bestMult = Math.max(this.bestMult, this.mult);
+    const storm = w.stormAt(this.x) > 0.5;
+    if (storm && !this.inStorm) this.events.push({ t: 'storm' });
+    this.inStorm = storm;
     this.things.update(dt, w, this.x, this.lead);
     this.touch(dt);
     this.tube(dt);

@@ -23,7 +23,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((r) => {
+    // ignoreVary: module scripts are requested with an Origin header, the precache without it
+    caches.match(req, { ignoreVary: true }).then((hit) => hit || fetch(req).then((r) => {
       if (r.ok) {
         const copy = r.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));

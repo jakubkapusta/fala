@@ -36,6 +36,8 @@ export const BAL = {
     /** a level's designed order of sections, one letter each (o open, f flat, c close, s steep,
      *  t tube, spaces ignored); after it runs out the generator picks at random again */
     script: '',
+    /** storms: a chance per section once difficulty ≥ from, lasting len sections; walls ×H, break ×vb */
+    storm: { chance: 0.05, from: 0.12, len: [3, 5] as [number, number], H: 1.18, vb: 1.06 },
   },
 
   surf: {
