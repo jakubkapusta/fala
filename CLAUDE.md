@@ -65,7 +65,7 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - Events: `wipe` has a `cause`; new `sting`, `shell`, `dolphin`, `pelican`, `tubeIn`, `tubeOut`. `Game.obstacleAhead(t)` for the bot, the camera (breathes out before obstacles) and hints.
 - Shells are currency (saved as `meta.shells`, for M4 boards), not points.
 - Bot: notices an obstacle with probability 0.55 + 0.43·skill, then passes above low things / below high ones, anticipating its climb by its reaction time; on and before tube sections it keeps under the lip.
-- Sim prints a second line per skill: wipe causes, tube time/exits, shells, dolphins, pelicans, stings. Current: ~55 / 138 / 246 s, 60 % of skill-0.9 rides reach night.
+- Sim prints a second line per skill: wipe causes, tube time/exits, shells, dolphins, pelicans, stings. Current: ~58 / 135 / 233 s, ~55 % of skill-0.9 rides reach night. Obstacle density ramps 0.14 → 1.2 per 1000 units over `rampLen` (owner: "could grow more with time").
 
 ## Sound (`src/audio/audio.ts`)
 

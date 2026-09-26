@@ -124,7 +124,7 @@ export const BAL = {
 
   /** things on the wave. Densities per 1000 units of wall, from difficulty 0 to 1. */
   things: {
-    obstacles: [0.14, 0.7] as [number, number],
+    obstacles: [0.14, 1.2] as [number, number],
     /** relative picks: rocks at the bottom, logs / buoys high on the wall, another surfer, jellyfish */
     mix: { rock: 3, log: 2, buoy: 1.5, rider: 1, jelly: 2 },
     helpers: [0.16, 0.06] as [number, number],
