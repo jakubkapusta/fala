@@ -13,8 +13,9 @@ import { BAL } from '../game/balance';
 import { clamp } from '../core/math';
 import { palette, type Palette } from './daycycle';
 import { drawSurfer } from './surfer';
+import { drawRiders, drawThings } from './things';
 
-type Kind = 'spray' | 'drop' | 'mist' | 'lip';
+type Kind = 'spray' | 'drop' | 'mist' | 'lip' | 'gold';
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; kind: Kind; g: number };
 type Flash = { x: number; y: number; t: number; kind: 'perfect' | 'clean' | 'wipe' | 'scrape' };
 
@@ -47,7 +48,8 @@ export class Renderer {
   private fig: Shapes;
   private sprites: DynBuffer;
   private colTex: WebGLTexture;
-  private colData = new Float32Array(COLS * 4);
+  /** row 0: H, pocket, closeout, flat; row 1: tube, steep */
+  private colData = new Float32Array(COLS * 8);
   private noiseTex: WebGLTexture;
   private parts: Particle[] = [];
   private flashes: Flash[] = [];
@@ -101,7 +103,7 @@ export class Renderer {
 
     this.colTex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, this.colTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, COLS, 1, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, COLS, 2, 0, gl.RGBA, gl.FLOAT, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -147,6 +149,14 @@ export class Renderer {
     }
   }
 
+  /** A collected shell: a burst of golden sparks. */
+  sparkle(x: number, y: number) {
+    for (let i = 0; i < 10 * this.quality; i++) {
+      const a = this.r() * Math.PI * 2, sp = 40 + this.r() * 90;
+      this.add(x, y, Math.cos(a) * sp, Math.sin(a) * sp + 30, 0.35 + this.r() * 0.3, 2 + this.r() * 2.5, 'gold', 120);
+    }
+  }
+
   private add(x: number, y: number, vx: number, vy: number, max: number, size: number, kind: Kind, g: number) {
     if (this.parts.length >= MAX_PARTICLES * this.quality) return;
     this.parts.push({ x, y, vx, vy, life: 0, max, size, kind, g });
@@ -165,7 +175,9 @@ export class Renderer {
     const sh = this.shapes;
     sh.reset();
     sh.ey = cam.ey;
+    this.sprites.reset();
     this.drawTrail(g, cam, P);
+    drawThings(sh, (x, y, size, hard, r, gg, b, a) => this.sprite(x, y, size, hard, r, gg, b, a), g, cam, P, this.t);
     this.drawRings(cam);
     sh.buf.upload();
     gl.enable(gl.BLEND);
@@ -182,7 +194,9 @@ export class Renderer {
     fig.reset();
     fig.ey = cam.ey;
     const sunVis = clamp((P.sunY + 0.03) / 0.06, 0, 1) * clamp(P.sun[0] / 2, 0, 1);
-    drawSurfer(fig, g, cam, P, this.t, sunVis > 0.2 ? P.sunX : P.moonX);
+    const lightX = sunVis > 0.2 ? P.sunX : P.moonX;
+    drawRiders(fig, g, cam, P, this.t, lightX);
+    drawSurfer(fig, g, cam, P, this.t, lightX);
     fig.buf.upload();
     this.pFlat.use();
     gl.bindVertexArray(fig.buf.vao);
@@ -212,9 +226,12 @@ export class Renderer {
       d[i * 4 + 1] = w.pocket(Math.max(x, w.xb + 1));
       d[i * 4 + 2] = w.kindAt(x, 'close');
       d[i * 4 + 3] = w.kindAt(x, 'flat');
+      const j = (COLS + i) * 4;
+      d[j] = w.kindAt(x, 'tube');
+      d[j + 1] = w.kindAt(x, 'steep');
     }
     gl.bindTexture(gl.TEXTURE_2D, this.colTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, COLS, 1, gl.RGBA, gl.FLOAT, d);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, COLS, 2, gl.RGBA, gl.FLOAT, d);
 
     const sunVis = clamp((P.sunY + 0.03) / 0.06, 0, 1) * clamp(P.sun[0] / 2, 0, 1);
     // texel centres: column i sits at u = (i + 0.5) / COLS
@@ -226,7 +243,8 @@ export class Renderer {
       .v3('u_top', P.top).v3('u_hor', P.hor).v3('u_sunCol', P.sun).v3('u_amb', P.amb).v3('u_deep', P.deep)
       .v3('u_scat', P.scat).v3('u_back', P.back).v3('u_cloud', P.cloud)
       .f3('u_sun', P.sunX, P.sunY, sunVis).f3('u_moon', P.moonX, P.moonY, P.moon)
-      .f1('u_backX', sunVis > 0.2 ? P.sunX : P.moonX).f1('u_night', P.night);
+      .f1('u_backX', sunVis > 0.2 ? P.sunX : P.moonX).f1('u_night', P.night)
+      .f3('u_tube', BAL.tube.reach, BAL.tube.mouth, BAL.tube.hi);
     this.fullscreen();
   }
 
@@ -320,7 +338,6 @@ export class Renderer {
 
   private drawParticles(cam: Camera, P: Palette) {
     const b = this.sprites;
-    b.reset();
     const x0 = cam.x - cam.w / 2 - 60, x1 = cam.x + cam.w / 2 + 60;
     const n = P.night;
     const px = 1 / cam.scale;
@@ -331,6 +348,7 @@ export class Renderer {
       if (p.kind === 'mist') { size *= 1 + (1 - k) * 1.5; hard = 0; a = k * (1 - k) * 4 * 0.22; }
       else if (p.kind === 'drop') { hard = 0.7; a = Math.min(1, k * 1.5) * 0.9; }
       else if (p.kind === 'lip') a = k * 0.7;
+      else if (p.kind === 'gold') { this.sprite(p.x, p.y, size * 1.5, 0.3, 1.3 * k, 0.9 * k, 0.35 * k, 0); continue; }
       else a = k * 0.85;
       size = Math.max(size, 1.4 * px);
       const c = this.foam(a, p.kind === 'mist' ? 0.9 : 1.1);

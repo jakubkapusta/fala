@@ -5,7 +5,8 @@ import '@fontsource/fraunces/600-italic.css';
 import './style.css';
 
 import { Renderer } from './render/renderer';
-import { Game, type GameEvent } from './game/game';
+import { Game, type GameEvent, type WipeCause } from './game/game';
+import type { ThingKind } from './game/things';
 import { Camera } from './game/camera';
 import { Input } from './game/input';
 import { BAL, tuneBal } from './game/balance';
@@ -15,6 +16,7 @@ import { Bot } from './sim/bot';
 import { applyTest, cleanTest, testLabel } from './game/tuning';
 import { makeRng } from './core/rng';
 import { PHASES } from './render/daycycle';
+import { Sound } from './audio/audio';
 
 type Mode = 'menu' | 'play' | 'pause' | 'end';
 
@@ -35,6 +37,10 @@ try {
 }
 
 const meta = loadMeta();
+const sound = new Sound();
+sound.enabled = meta.sound;
+// browsers only let audio start from a user gesture
+for (const ev of ['pointerdown', 'keydown', 'touchend'] as const) window.addEventListener(ev, () => sound.start(), { passive: true });
 let test = cleanTest(meta.test);
 applyTest(test);
 const camera = new Camera();
@@ -61,7 +67,7 @@ const todMatch = /tod=([a-z.0-9]+)/.exec(hash);
 if (todMatch) todFixed = todMatch[1] in PHASES ? PHASES[todMatch[1] as keyof typeof PHASES] : parseFloat(todMatch[1]) || 0;
 
 const ui = new Ui({
-  start: () => startRide(),
+  start: (seed?: number) => startRide(undefined, seed),
   watch: () => startRide(0.92),
   resume: () => resume(),
   menu: () => toMenu(),
@@ -73,7 +79,14 @@ const ui = new Ui({
     saveMeta(meta);
     ui.showMenu(meta.best, test);
   },
+  toggleSound: () => {
+    meta.sound = !meta.sound;
+    saveMeta(meta);
+    sound.setEnabled(meta.sound);
+    ui.setSound(meta.sound);
+  },
 });
+ui.sound = meta.sound;
 ui.touch = matchMedia('(pointer: coarse)').matches;
 ui.showDebug = /debug/.test(hash) || !!balMatch;
 
@@ -94,12 +107,12 @@ function newDemo() {
 
 let watching = false;
 /** Start a ride; with `botSkill` the bot rides it (the player can take over by touching). */
-function startRide(botSkill?: number) {
+function startRide(botSkill?: number, fixedSeed?: number) {
   if (botSkill === undefined) {
     meta.runs++;
     saveMeta(meta);
   }
-  const seed = (Date.now() ^ (performance.now() * 1000)) >>> 0;
+  const seed = fixedSeed ?? (Date.now() ^ (performance.now() * 1000)) >>> 0;
   game = new Game(seed);
   demo = null;
   watching = botSkill !== undefined;
@@ -140,7 +153,10 @@ function toMenu() {
   ui.showMenu(meta.best, test);
 }
 
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pause();
+  sound.hidden(document.hidden);
+});
 window.addEventListener('pagehide', () => pause());
 window.addEventListener('keydown', (e) => {
   if (mode === 'end' && (e.code === 'Space' || e.code === 'Enter') && !e.repeat) {
@@ -153,7 +169,39 @@ function vibrate(ms: number) {
   try { navigator.vibrate?.(ms); } catch { /* ignore */ }
 }
 
+const WIPE_TEXT: Partial<Record<WipeCause, string>> = { lip: 'Lip cię zgarnął', rock: 'Skała!', log: 'Kłoda!', buoy: 'Boja!', rider: 'Zderzenie!' };
+
+// first-time hints, one at a time, from the wave data (never shown while the bot rides)
+function hintOnce(id: string, html: string) {
+  if (watching || auto || ui.hintBusy || hintSeen(id)) return;
+  ui.hint(html, 4.5);
+  markHint(id);
+}
+const THING_HINT: Partial<Record<ThingKind, [string, string]>> = {
+  rock: ['rock', 'Skały przy dnie — przejedź <b>nad nimi</b>'],
+  log: ['high', 'Kłoda wysoko na ścianie — przejedź <b>dołem</b> albo przeskocz'],
+  buoy: ['high', 'Boja wysoko na ścianie — przejedź <b>dołem</b> albo przeskocz'],
+  rider: ['rider', 'Inny surfer — omiń go <b>górą albo dołem</b>'],
+  jelly: ['jelly', 'Meduzy przy dnie <b>parzą</b> i spowalniają'],
+};
+function hints() {
+  const g = game, tempo = BAL.tempo;
+  if (g.mode === 'air' && g.modeT < 0.3) hintOnce('air', 'W powietrzu <b>trzymaj</b>, żeby się obrócić. Puść, a deska sama się ustawi');
+  if (g.closeAhead(3 * tempo) !== null) hintOnce('close', 'Biała grzywa — <b>sekcja zamykająca</b>. Przejedź ją na pełnej prędkości');
+  if (g.wave.kindAt(g.x + 2.5 * tempo * Math.max(g.vxNow, 200), 'tube') > 0.5) hintOnce('tube', '<b>Tuba!</b> Jedź nisko pod lipem — punkty za każdą sekundę, premia za wyjście');
+  const ob = g.obstacleAhead(2.2 * tempo);
+  const h = ob && THING_HINT[ob.kind];
+  if (h) hintOnce(h[0], h[1]);
+  for (const t of g.things.list) {
+    if (t.done || t.x < g.x || t.x > g.x + 2 * tempo * Math.max(g.vxNow, 200)) continue;
+    if (t.kind === 'dolphin') hintOnce('dolphin', 'Delfin! Jedź <b>obok niego</b> — popchnie cię');
+    else if (t.kind === 'pelican') hintOnce('pelican', 'Wpadnij na pelikana <b>w locie</b> — podbije cię wyżej');
+    else if (t.kind === 'shell') hintOnce('shell', 'Zbieraj <b>muszle</b> — linie podpowiadają dobrą trasę');
+  }
+}
+
 function handleEvents(events: GameEvent[]) {
+  if (mode === 'play') sound.events(events);
   for (const e of events) {
     if (mode !== 'play') continue;
     switch (e.t) {
@@ -174,8 +222,29 @@ function handleEvents(events: GameEvent[]) {
         break;
       case 'wipe':
         renderer.impact('wipe', game.x, game.y);
-        ui.pop('Wywrotka', 'wipe');
+        ui.pop(WIPE_TEXT[e.cause] ?? 'Wywrotka', 'wipe');
         vibrate(60);
+        break;
+      case 'sting':
+        renderer.impact('scrape', game.x, game.y);
+        ui.pop('Meduza!', 'wipe');
+        vibrate(25);
+        break;
+      case 'shell':
+        renderer.sparkle(game.x, game.y);
+        break;
+      case 'dolphin':
+        ui.pop('Delfin!<small>popycha</small>');
+        break;
+      case 'pelican':
+        renderer.impact('clean', game.x, game.y);
+        ui.pop(`Pelikan!<small>+${e.pts.toLocaleString('pl-PL')}</small>`);
+        vibrate(15);
+        break;
+      case 'tubeOut':
+        renderer.impact('perfect', game.x, game.y);
+        ui.pop(`Z tuby!<small>${(e.secs / BAL.tempo).toFixed(1).replace('.', ',')} s · +${e.pts.toLocaleString('pl-PL')}</small>`, 'perfect');
+        vibrate(20);
         break;
       case 'gone':
         vibrate(120);
@@ -192,6 +261,7 @@ function checkEnd() {
   input.reset();
   const isBest = !watching && game.score > meta.best;
   if (isBest) meta.best = game.score;
+  if (!watching) meta.shells += game.shells;
   saveMeta(meta);
   if (!watching) logRide({ date: today(), time: Math.round(realTime), meters: Math.round(game.meters), score: game.score, wipes: game.wipes, tricks: game.tricks, tempo: BAL.tempo, test: testLabel(test) });
   ui.showEnd({ game, best: meta.best, isBest, realTime });
@@ -229,13 +299,16 @@ function frame(now: number) {
     game.update(gdt, held);
     if (game.mode !== 'gone') realTime += dt * slowmo;
     handleEvents(game.events);
+    if (mode === 'play') hints();
     if (mode === 'play') ui.update(game, dt, { quality: renderer.quality, tempo: BAL.tempo, held, bot: !!auto, test: testLabel(test) });
     checkEnd();
   }
   camera.update(game, canvas.clientWidth || innerWidth, canvas.clientHeight || innerHeight, dt);
   fade += (fadeTarget - fade) * Math.min(1, dt * 4);
   if (mode !== 'pause' && game.mode !== 'gone') dayClock += dt;
-  renderer.render(game, camera, { fade, dt, phase: todFixed ?? dayStart + dayClock / DAY_S });
+  const phase = todFixed ?? dayStart + dayClock / DAY_S;
+  renderer.render(game, camera, { fade, dt, phase });
+  sound.update(game, dt, phase, mode === 'play');
   if (mode === 'play') adapt(raw);
   requestAnimationFrame(frame);
 }
@@ -256,13 +329,17 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__fala = {
   get game() { return game; }, camera, renderer, BAL, loadStats,
   auto: (skill: number | null) => { auto = skill === null ? null : new Bot(skill, makeRng(7)); },
-  start: () => startRide(),
+  start: (seed?: number) => startRide(undefined, seed),
   freeze: (on: boolean) => { frozen = on; fade = fadeTarget; },
   /** fix the time of day (0 dawn, 0.25 noon, 0.5 sunset, 0.75 night) or `null` for the ride's clock */
   tod: (p: number | keyof typeof PHASES | null) => { todFixed = p === null ? null : typeof p === 'number' ? p : PHASES[p]; },
   /** hide the DOM overlay (HUD, screens) for clean screenshots */
   hud: (on: boolean) => { document.getElementById('ui')!.style.display = on ? '' : 'none'; },
   resume: () => resume(),
+  /** dev: put a thing `dx` units ahead of the surfer at height `h` (share of the wall) */
+  spawn: (kind: ThingKind, dx: number, h: number) => {
+    game.things.list.push({ kind, x: game.x + dx, h, y: h * game.wave.H(game.x + dx), vx: kind === 'dolphin' ? BAL.things.dolphinSpeed : kind === 'pelican' ? 60 : 0, phase: Math.random() * 9, done: false, used: 0, age: 0 });
+  },
   /** put the surfer `lead` wall heights ahead of the break (to look at the lip and whitewater) */
   peek: (lead: number) => {
     const H = game.wave.H(game.wave.xb);

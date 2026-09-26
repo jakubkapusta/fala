@@ -212,3 +212,17 @@ button, .clickable { pointer-events: auto; }
   .menu .title { font-size: 56px; }
   .menu .btn.big { padding: 13px 48px; font-size: 18px; }
 }
+
+/* shells collected this ride */
+.hud .shells { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 14px; font-weight: 600; color: #ffd98a; font-variant-numeric: tabular-nums; }
+.hud .shells svg { width: 14px; height: 14px; }
+.hud .shells.bump { animation: bump 0.35s ease-out; }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+/* barrel ahead / inside */
+.closeout.tubewarn { top: calc(var(--safe-top) + 92px); color: #bff3ff; text-shadow: 0 0 10px rgba(120, 220, 255, 0.7); }
+.closeout.tubewarn.show { animation: none; }
+.closeout.tubewarn.inside { color: #fff; text-shadow: 0 0 14px rgba(120, 230, 255, 0.95); }
+.closeout.tubewarn span::after { content: ''; }
+
+/* sound toggle in the menu corner */
+.menu .sound-btn { position: absolute; top: calc(var(--safe-top) + 14px); right: calc(var(--safe-r) + 14px); z-index: 2; }

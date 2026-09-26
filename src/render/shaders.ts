@@ -57,7 +57,8 @@ ${TEX_NOISE}
 in vec2 v_uv;
 uniform vec4 u_view;      // cam x, cam y, view w, view h (world units; h includes the vertical stretch)
 uniform vec2 u_res;
-uniform sampler2D u_col;  // per column: H, pocket, closeout 0..1, flat 0..1
+uniform sampler2D u_col;  // per column, row 0: H, pocket, closeout 0..1, flat 0..1; row 1: tube, steep
+uniform vec3 u_tube;      // barrel: reach, mouth (in H), lower edge of the lip (y/H)
 uniform vec2 u_colX;      // x of the first column, 1 / span
 uniform float u_xb;       // break position
 uniform float u_time;
@@ -73,7 +74,8 @@ out vec4 o;
 
 float asp, hzUv, pxY;
 
-vec4 column(float x){ return texture(u_col, vec2((x - u_colX.x) * u_colX.y, .5)); }
+vec4 column(float x){ return texture(u_col, vec2((x - u_colX.x) * u_colX.y, .25)); }
+vec4 column2(float x){ return texture(u_col, vec2((x - u_colX.x) * u_colX.y, .75)); }
 float sq(float x){ return x * x; }
 // light passing through water of a given thickness (0 = paper thin): red goes first
 vec3 transmit(float k){ return exp(-vec3(3.2, 1., .8) * (.08 + k)); }
@@ -224,11 +226,12 @@ float ripple(vec2 p){
 
 float backLobe(vec2 uv){ float x = (uv.x - u_backX) * asp; return .2 + .6 * exp(-x * x * 4.) + 1.8 * exp(-x * x * 40.); }
 
+float steepK = 0.;
 vec3 face(vec2 wp, vec2 uv, vec4 cd, float d){
   float H = cd.x, P = cd.y, C = cd.z, F = cd.w;
   float v = clamp(wp.y / H, 0., 1.);
   // far ahead of the break a rounded hump, in the pocket a steep wall pitching over at the top
-  float steep = clamp(P * 1.1 + C * .6, 0., 1.) * (1. - .45 * F);
+  float steep = clamp(P * 1.1 + C * .6 + steepK * .4, 0., 1.) * (1. - .45 * F);
   // sets of stronger water along the wave, so the wall isn't the same everywhere
   float lump = vnoise(vec2(wp.x * .0035, 3.7));
   float th = mix(.12, 1.45, smoothstep(0., .55, v)) + smoothstep(.6, 1., v) * mix(-.7, .55, steep);
@@ -278,8 +281,27 @@ vec3 face(vec2 wp, vec2 uv, vec4 cd, float d){
   return c;
 }
 
-vec3 waterMass(vec2 wp, vec2 uv, vec4 cd, float d){
+vec3 waterMass(vec2 wp, vec2 uv, vec4 cd, float d, float b){
   float H = cd.x, L = .6 * H;
+  if (d < 0. && b > .005) {
+    // the barrel: the lip hangs over the wall, its lower edge coming down from the mouth
+    float yc = H * (1.1 + (u_tube.z - 1.1) * b) + H * .03 * (vnoise(vec2(wp.x * .06, u_time * 2.5)) - .5);
+    float lobe = backLobe(uv);
+    if (wp.y > yc) {
+      // thick where it leaves the crest, paper thin at its falling edge; streaks pour down it
+      float k = clamp((wp.y - yc) / max(H * (1.06 - u_tube.z), 1.), 0., 1.);
+      float st = vnoise(vec2(wp.x * .09 + wp.y * .05, wp.y * .025 + u_time * 2.2));
+      vec3 thick = u_deep * (.5 + .4 * u_amb) + u_scat * u_amb * .2;
+      vec3 thinC = u_scat * u_amb * .5 + transmit(.25) * backLight(.9) * lobe * 1.4;
+      vec3 c = mix(thinC, thick, smoothstep(.1, .9, k)) * (.75 + .5 * st);
+      c += transmit(.4) * u_back * lobe * .5 * smoothstep(.55, .95, st) * (1. - k);
+      // foam fringe dripping off the lip's edge, the thin rim glowing at the top
+      c = mix(c, foamCol(wp, .95), smoothstep(H * .07, 0., wp.y - yc) * (.5 + .5 * st));
+      return c + transmit(.25) * u_back * exp(-(H * (1. + .06 * b) - wp.y) / (H * .03)) * .8;
+    }
+    vec3 c = face(wp, uv, cd, d) * mix(1., .5, b);
+    return c + transmit(.5) * backLight(.6) * lobe * .45 * b * exp(-(yc - wp.y) / (H * .12));
+  }
   if (d < 0.) return face(wp, uv, cd, d);
   if (d >= L) return whitewater(wp, H, foamTop(d, H, wp.x));
   // the lip pitching over: a thin falling curtain, the tube under its edge
@@ -314,9 +336,11 @@ void main(){
   pxY = u_view.w / u_res.y;
   vec2 wp = u_view.xy + (uv - .5) * u_view.zw;
   hzUv = (u_hz - u_view.y) / u_view.w + .5;
-  vec4 cd = column(wp.x);
+  vec4 cd = column(wp.x), cd2 = column2(wp.x);
+  steepK = cd2.y;
   float H = cd.x, d = u_xb - wp.x, L = .6 * H;
-  float top = massTop(wp.x, H, d);
+  float b = d < 0. ? cd2.x * smoothstep(u_tube.x * H, (u_tube.x - u_tube.y) * H, -d) : 0.;
+  float top = massTop(wp.x, H, d) + H * .06 * b;
   float soft = d > .45 * L ? H * .03 : 0.;
   float cov = wp.y >= 0. ? clamp((top - wp.y) / (pxY + soft) + .5, 0., 1.) : 0.;
   vec3 c = vec3(0.);
@@ -328,7 +352,7 @@ void main(){
       c += (u_amb * .22 + u_back * .08 + vec3(.02, .2, .45) * u_night) * m * (.5 + .5 * vnoise(wp * .02 + vec2(u_time * .3, 0.)));
     }
   }
-  if (cov > 0.) c = mix(c, waterMass(wp, uv, cd, d), cov);
+  if (cov > 0.) c = mix(c, waterMass(wp, uv, cd, d, b), cov);
   if (wp.y < 0. && d > .4 * L) {
     // whitewater spreading towards us in front of the break
     float sk = H * .12 * smoothstep(.4 * L, L, d) * exp(-max(d - L, 0.) / (4. * H));

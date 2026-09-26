@@ -99,7 +99,7 @@ export class Things {
 
   private helper(k: 'dolphin' | 'pelican', x: number) {
     if (k === 'dolphin') this.add(k, x, this.rng.range(0.3, 0.55), BAL.things.dolphinSpeed);
-    else this.add(k, x, this.rng.range(1.25, 1.55), 60);
+    else this.add(k, x, this.rng.range(1.15, 1.35), 60);
   }
 
   update(dt: number, w: Wave, px: number, lead: number) {

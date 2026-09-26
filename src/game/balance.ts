@@ -20,7 +20,7 @@ export const BAL = {
     /** tall, steep, lots of power: big airs */
     steep: { H: [250, 300], len: [900, 1600], vb: 320, power: 1.3, weight: 1.5 },
     /** the lip throws over the wall ahead of the break: a barrel (see `tube`) */
-    tube: { H: [230, 280], len: [800, 1300], vb: 320, power: 1.2, weight: 1.3 },
+    tube: { H: [230, 280], len: [800, 1300], vb: 390, power: 1.2, weight: 1.3 },
     /** units over which height / breaking speed blend at a section boundary */
     blend: 160,
     /** open sections at the start before anything else can appear */
@@ -120,7 +120,7 @@ export const BAL = {
    *  ahead of it; the open band inside is y/H ∈ [lo, hi]. Above hi + hitMargin the lip knocks the
    *  surfer off (wipeout), below lo the foam drags (per second). Points per game second inside ×mult,
    *  a bonus for riding out of it after at least `minTime` game s (and +1 multiplier). */
-  tube: { reach: 3.2, lo: 0.1, hi: 0.66, hitMargin: 0.08, foamDrag: 1.2, mouth: 0.6, ptsPerSec: 120, exit: 400, minTime: 0.8 },
+  tube: { reach: 3.8, lo: 0.1, hi: 0.66, hitMargin: 0.08, foamDrag: 1.2, mouth: 0.6, ptsPerSec: 120, exit: 400, minTime: 0.8 },
 
   /** things on the wave. Densities per 1000 units of wall, from difficulty 0 to 1. */
   things: {

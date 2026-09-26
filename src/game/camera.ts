@@ -43,7 +43,7 @@ export class Camera {
 
     const left = Math.max(Math.min(w.xb, g.x) - C.behind * H0, g.x - C.maxBehind * H0);
     // breathe out ahead of a hazard so there's time to see it coming
-    const hazard = g.closeAhead(2.5 * BAL.tempo) !== null || w.sectionAt(g.x).kind === 'close';
+    const hazard = g.closeAhead(2.5 * BAL.tempo) !== null || w.sectionAt(g.x).kind === 'close' || g.obstacleAhead(1.6 * BAL.tempo) !== null;
     const look = hazard ? C.lookAheadHazard : C.lookAhead;
     this.look = this.init && !snap ? this.look + (look - this.look) * damp(1.2, dt) : look;
     const right = g.x + this.look * BAL.tempo * this.speed;
