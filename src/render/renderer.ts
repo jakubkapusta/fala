@@ -104,11 +104,12 @@ export class Renderer {
 
     this.scene.bind();
     // sun low on the left, behind the wave
-    this.pSky.use().v3('u_top', [0.05, 0.1, 0.24]).v3('u_bot', [1.0, 0.52, 0.3]).f2('u_sun', 0.22, 0.62).f2('u_res', this.W, this.H);
+    this.pSky.use().v3('u_top', [0.04, 0.08, 0.2]).v3('u_bot', [0.55, 0.3, 0.2]).f2('u_sun', 0.18, 0.5).f2('u_res', this.W, this.H);
     this.fullscreen();
 
     const sh = this.shapes;
     sh.reset();
+    sh.ey = cam.ey;
     this.drawWorld(g, cam);
     sh.buf.upload();
     gl.enable(gl.BLEND);
@@ -246,12 +247,15 @@ export class Renderer {
 
   private drawSurfer(g: Game, cam: Camera) {
     const sh = this.shapes, px = 1 / cam.scale;
-    const S = Math.max(26, BAL.cam.minSurferPx * px); // figure height in world units
+    const S = Math.max(26, BAL.cam.minSurferPx * px); // figure height in x-units
     const wipe = g.mode === 'wipe' || g.mode === 'gone';
-    const b = g.board;
-    const ux = Math.cos(b), uy = Math.sin(b);
-    const nx = -uy, ny = ux;
-    const x = g.x, y = g.y + S * 0.04;
+    // the figure is built in unstretched screen proportions: angles as they look on screen,
+    // local y offsets squashed back by ey when placed in the world
+    const e = cam.ey;
+    const b = Math.atan2(Math.sin(g.board) * e, Math.cos(g.board));
+    const ux = Math.cos(b), uy = Math.sin(b) / e;
+    const nx = -Math.sin(b), ny = Math.cos(b) / e;
+    const x = g.x, y = g.y + (S * 0.04) / e;
     const crouch = g.mode === 'air' ? 0.55 : g.crouch;
     const rim = S * 0.07;
 
@@ -273,14 +277,11 @@ export class Renderer {
     // board
     const bl = S * 0.5, bt = S * 0.07;
     const bang = wipe ? b * 1.4 + 0.8 : b;
-    const bx = Math.cos(bang) * bl, by = Math.sin(bang) * bl;
-    const board = () => {
-      sh.stroke(x - bx, y - by - S * 0.02, x + bx, y + by - S * 0.02, bt + rim, RIM);
-    };
-    board();
+    const bx = Math.cos(bang) * bl, by = (Math.sin(bang) * bl) / e, bo = (S * 0.02) / e;
+    sh.stroke(x - bx, y - by - bo, x + bx, y + by - bo, bt + rim, RIM);
     for (const s of segs) sh.stroke(s[0], s[1], s[2], s[3], s[4] + rim, RIM);
     if (segs.length) sh.disk(head[0], head[1], S * 0.1 + rim / 2, RIM, 12);
-    sh.stroke(x - bx, y - by - S * 0.02, x + bx, y + by - S * 0.02, bt, solid(0.9, 0.75, 0.5));
+    sh.stroke(x - bx, y - by - bo, x + bx, y + by - bo, bt, solid(0.9, 0.75, 0.5));
     for (const s of segs) sh.stroke(s[0], s[1], s[2], s[3], s[4], INK);
     if (segs.length) sh.disk(head[0], head[1], S * 0.1, INK, 12);
   }

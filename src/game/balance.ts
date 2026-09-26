@@ -9,22 +9,22 @@
 
 export const BAL = {
   /** game seconds per real second; scales the whole simulation, not its shape */
-  tempo: 0.8,
+  tempo: 1,
   unitsPerMeter: 25,
 
   wave: {
     /** section kinds: wall height range, length range, breaking speed, power multiplier, pick weight */
-    open: { H: [90, 115], len: [1400, 2600], vb: 195, power: 1, weight: 6 },
-    flat: { H: [58, 72], len: [900, 1500], vb: 155, power: 0.55, weight: 2 },
-    close: { H: [96, 125], len: [420, 700], vb: 290, power: 1.15, weight: 1.6 },
+    open: { H: [90, 115], len: [1400, 2600], vb: 320, power: 1, weight: 6 },
+    flat: { H: [58, 72], len: [900, 1500], vb: 260, power: 0.55, weight: 2 },
+    close: { H: [96, 125], len: [420, 700], vb: 500, power: 1.15, weight: 1.6 },
     /** units over which height / breaking speed blend at a section boundary */
     blend: 160,
     /** open sections at the start before anything else can appear */
     warmup: 3,
     /** difficulty ramps 0 → 1 over this many units of break travel */
-    rampLen: 80000,
+    rampLen: 160000,
     /** at full difficulty: breaking speed ×(1 + vbRamp), closeout weight ×(1 + closeRamp) */
-    vbRamp: 0.95,
+    vbRamp: 0.6,
     closeRamp: 1,
     /** a closeout never follows a closeout and needs this much open/flat wall before it */
     closeGap: 1200,
@@ -32,32 +32,33 @@ export const BAL = {
 
   surf: {
     /** target heading when holding (down the face) / released (up the face) */
-    headDown: -38,
-    headUp: 34,
+    headDown: -48,
+    headUp: 40,
     /** heading turn rate (deg/s) */
-    turn: 260,
+    turn: 320,
     /** gravity along the face */
-    g: 450,
+    g: 800,
     /** wave push at full power (all a surfer riding straight gets) */
     push: 60,
-    /** pumping, part 1: gravity ×(1 + press·pocket) while diving, ×(1 − lift·pocket) while climbing */
-    press: 0.1,
-    lift: 0.1,
+    /** pumping, part 1: gravity ×(1 + press·pocket) while diving *and holding*, ×(1 − lift·pocket)
+     *  while climbing (the wave lifts the surfer, so going back up costs little in the pocket) */
+    press: 0.4,
+    lift: 0.75,
     /** pumping, part 2 (the main one): drive while turning up near the bottom / down near the top.
      *  Full between band[0] and the wall edge, fading to zero at band[1] (in y/H). */
-    bottomDrive: 1800,
+    bottomDrive: 1400,
     bottomBand: [0.15, 0.55] as [number, number],
-    topDrive: 900,
+    topDrive: 600,
     topBand: [0.5, 0.85] as [number, number],
     /** drag = dragK·v² (+ extra at the bottom / in foam, per second) */
-    dragK: 0.001,
+    dragK: 0.0005,
     bottomDrag: 0.5,
     foamDrag: 2.0,
     minSpeed: 90,
     maxSpeed: 1100,
     /** power vs distance ahead of the break, in wall heights: full up to `near`, zero at `reach` */
-    near: 0.8,
-    reach: 4,
+    near: 1.2,
+    reach: 5,
     /** power vs height on the wall (y/H): peak and width of the bump, floor at the very bottom */
     peak: 0.52,
     width: 0.45,
@@ -67,12 +68,12 @@ export const BAL = {
   air: {
     /** vertical speed needed to leave the lip; below it the surfer rolls over the top */
     launchVy: 110,
-    /** extra vertical kick from the lip, × power at the crest */
+    /** extra vertical kick from the lip, × pocket strength */
     pop: 200,
-    g: 800,
+    g: 1000,
     /** board rotation while holding (deg/s, forward = clockwise) */
-    spin: 540,
-    /** how fast the board settles towards the landing angle when not holding (1/s) */
+    spin: 650,
+    /** after letting go the board swings to the landing angle (shorter way) at this rate (1/s) */
     settle: 5,
     /** landing reference angle = crest slope + refMix·(flight direction − crest slope) */
     refMix: 0.35,
@@ -80,12 +81,12 @@ export const BAL = {
 
   land: {
     /** |board − reference| thresholds (deg) */
-    perfect: 12,
-    clean: 35,
+    perfect: 18,
+    clean: 50,
     /** landing speed = take-off speed × perfectMul + perfectAdd (perfect) or × cleanKeep (clean) */
-    perfectMul: 1.1,
-    perfectAdd: 30,
-    cleanKeep: 0.95,
+    perfectMul: 1.12,
+    perfectAdd: 40,
+    cleanKeep: 1,
     /** heading right after landing is clamped to this (deg) */
     minHeading: -60,
   },
@@ -96,14 +97,14 @@ export const BAL = {
   swallow: 0.15,
 
   /** the ride starts with a drop-in: `dropIn` game seconds down the face regardless of input */
-  start: { lead: 1.8, y: 0.8, speed: 300, dropIn: 0.55 },
+  start: { lead: 2.5, y: 0.85, speed: 480, dropIn: 0.45 },
 
   score: {
     perHalfTurn: 100,
     /** points per unit of apex height above the crest */
     air: 1.2,
     /** apex (in H) that counts as a trick even without rotation */
-    bigAir: 0.6,
+    bigAir: 1.0,
     perfect: 150,
     multMax: 8,
   },
@@ -113,18 +114,25 @@ export const BAL = {
 
   cam: {
     /** real seconds of travel visible ahead of the surfer */
-    lookAhead: 1.4,
+    lookAhead: 0.65,
     /** wall heights visible behind the break (foam) */
     behind: 0.45,
+    /** but never more than this many wall heights behind the surfer (a far break isn't a threat) */
+    maxBehind: 1.2,
     /** water in front of the wave (in H) and headroom above the crest / flight apex */
     below: 0.3,
-    above: 0.35,
+    above: 0.3,
     /** share of spare vertical space that goes to the sky */
-    skyShare: 0.62,
+    skyShare: 0.6,
+    /** vertical exaggeration on tall screens: y is drawn up to this much taller than x
+     *  (1 on landscape, rising with the height/width ratio). Visual only, physics untouched. */
+    stretch: 1.8,
+    /** on wide screens show at least this many wall heights across (fades out towards portrait) */
+    minWide: 5,
     /** zoom and framing spring rate (1/s) */
     spring: 3.2,
     /** minimum on-screen surfer height (css px) */
-    minSurferPx: 28,
+    minSurferPx: 30,
   },
 };
 

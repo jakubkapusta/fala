@@ -5,6 +5,7 @@ import { BAL } from '../game/balance';
 
 export type UiHooks = {
   start: () => void;
+  watch: () => void;
   resume: () => void;
   menu: () => void;
   pause: () => void;
@@ -13,7 +14,7 @@ export type UiHooks = {
 
 export type EndInfo = { game: Game; best: number; isBest: boolean; realTime: number };
 
-const TEMPOS = [0.7, 0.8, 0.9, 1];
+const TEMPOS = [0.85, 1, 1.15];
 
 const el = (html: string) => {
   const d = document.createElement('div');
@@ -36,6 +37,8 @@ export class Ui {
   private popEl: HTMLElement;
   private hintEl: HTMLElement;
   private debug: HTMLElement;
+  private thumb: HTMLElement;
+  private botTag: HTMLElement;
   private menuEl: HTMLElement;
   private pauseEl: HTMLElement;
   private endEl: HTMLElement;
@@ -61,6 +64,8 @@ export class Ui {
     this.popEl = el(`<div class="pop"></div>`);
     this.hintEl = el(`<div class="hint"></div>`);
     this.debug = el(`<div class="debug"></div>`);
+    this.thumb = el(`<div class="thumb"><i></i><span>trzymasz</span></div>`);
+    this.botTag = el(`<div class="bot-tag">Jedzie bot · dotknij, żeby przejąć</div>`);
     this.menuEl = el(`<div class="screen menu"></div>`);
     this.pauseEl = el(`<div class="screen dim pause">
       <h2 class="h2">Pauza</h2>
@@ -70,7 +75,7 @@ export class Ui {
     this.pauseEl.querySelector('.resume')!.addEventListener('click', () => this.h.resume());
     this.pauseEl.querySelector('.to-menu')!.addEventListener('click', () => this.h.menu());
     this.endEl = el(`<div class="screen dim end"></div>`);
-    for (const e of [this.danger, this.hud, this.close, this.popEl, this.hintEl, this.debug, this.menuEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
+    for (const e of [this.danger, this.hud, this.thumb, this.botTag, this.close, this.popEl, this.hintEl, this.debug, this.menuEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
   }
 
   hideScreens() {
@@ -88,8 +93,10 @@ export class Ui {
         : '<b>Trzymaj spację</b> albo przycisk myszy — zjazd w dół<br><b>Puść</b> — wspinaczka w górę<br>W powietrzu trzymanie <b>obraca deską</b> · Esc — pauza'}</div>
       ${best > 0 ? `<div class="best">Rekord: <b>${fmt(best)}</b></div>` : ''}
       <button class="btn primary big go">Płyń</button>
+      <button class="btn ghost watch">Zobacz, jak jeździ bot</button>
       <div class="tempo"><span>Tempo (test M1)</span>${TEMPOS.map((t) => `<button class="chip${Math.abs(t - tempo) < 1e-3 ? ' on' : ''}" data-t="${t}">${String(t).replace('.', ',')}</button>`).join('')}</div>`;
     this.menuEl.querySelector('.go')!.addEventListener('click', () => this.h.start());
+    this.menuEl.querySelector('.watch')!.addEventListener('click', () => this.h.watch());
     this.menuEl.querySelectorAll<HTMLElement>('.chip').forEach((b) => b.addEventListener('click', () => this.h.setTempo(Number(b.dataset.t))));
     this.menuEl.classList.add('show');
   }
@@ -143,7 +150,12 @@ export class Ui {
     this.hintT = time;
   }
 
-  update(g: Game, dt: number, extra: { quality: number; tempo: number }) {
+  update(g: Game, dt: number, extra: { quality: number; tempo: number; held: boolean; bot: boolean }) {
+    // the button, visible: shows the pumping rhythm (yours or the bot's)
+    this.thumb.classList.add('show');
+    this.thumb.classList.toggle('on', extra.held);
+    this.thumb.querySelector('span')!.textContent = extra.bot ? 'bot trzyma' : 'trzymasz';
+    this.botTag.classList.toggle('show', extra.bot);
     this.meters.textContent = `${fmt(g.meters)} m`;
     this.score.textContent = fmt(g.score);
     this.mult.textContent = g.mult > 1 ? `×${g.mult}` : '';
@@ -179,6 +191,8 @@ export class Ui {
 
   hideHud() {
     this.hud.classList.add('hidden');
+    this.thumb.classList.remove('show');
+    this.botTag.classList.remove('show');
     this.close.classList.remove('show');
     this.danger.style.opacity = '0';
   }

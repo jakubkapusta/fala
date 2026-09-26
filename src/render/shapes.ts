@@ -11,6 +11,8 @@ export const mixCol = (a: Col, b: Col, t: number): Col => [a[0] + (b[0] - a[0]) 
 
 export class Shapes {
   buf: DynBuffer;
+  /** vertical exaggeration of the view: widths and round shapes are kept round on screen */
+  ey = 1;
   constructor(gl: GL) {
     this.buf = new DynBuffer(gl, 6, [
       { loc: 0, size: 2, offset: 0 },
@@ -43,8 +45,9 @@ export class Shapes {
   }
 
   line(ax: number, ay: number, bx: number, by: number, w: number, c: Col, c2 = c) {
-    const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
-    const nx = (-dy / l) * w * 0.5, ny = (dx / l) * w * 0.5;
+    const e = this.ey;
+    const dx = bx - ax, dy = (by - ay) * e, l = Math.hypot(dx, dy) || 1;
+    const nx = (-dy / l) * w * 0.5, ny = ((dx / l) * w * 0.5) / e;
     this.quad(ax + nx, ay + ny, bx + nx, by + ny, bx - nx, by - ny, ax - nx, ay - ny, c, c2, c2, c);
   }
 
@@ -60,7 +63,7 @@ export class Shapes {
     let px = x + r, py = y;
     for (let i = 1; i <= n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const qx = x + Math.cos(a) * r, qy = y + Math.sin(a) * r;
+      const qx = x + Math.cos(a) * r, qy = y + (Math.sin(a) * r) / this.ey;
       this.tri(x, y, px, py, qx, qy, c, e, e);
       px = qx; py = qy;
     }
@@ -70,9 +73,9 @@ export class Shapes {
     let pa = 0;
     for (let i = 1; i <= n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const r0 = r - w / 2, r1 = r + w / 2;
-      this.quad(x + Math.cos(pa) * r0, y + Math.sin(pa) * r0, x + Math.cos(pa) * r1, y + Math.sin(pa) * r1,
-        x + Math.cos(a) * r1, y + Math.sin(a) * r1, x + Math.cos(a) * r0, y + Math.sin(a) * r0, c);
+      const r0 = r - w / 2, r1 = r + w / 2, e = this.ey;
+      this.quad(x + Math.cos(pa) * r0, y + (Math.sin(pa) * r0) / e, x + Math.cos(pa) * r1, y + (Math.sin(pa) * r1) / e,
+        x + Math.cos(a) * r1, y + (Math.sin(a) * r1) / e, x + Math.cos(a) * r0, y + (Math.sin(a) * r0) / e, c);
       pa = a;
     }
   }

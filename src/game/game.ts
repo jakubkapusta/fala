@@ -123,7 +123,8 @@ export class Game {
     const pk = foam ? 0 : w.pocket(this.x);
     const sn = Math.sin(this.th);
     // pumping: heavy on the way down, light on the way up (the face lifts the surfer)
-    const gMul = sn < 0 ? 1 + S.press * pk : 1 - S.lift * pk;
+    // (pressing only counts while the player is actually holding)
+    const gMul = sn < 0 ? 1 + (this.held ? S.press * pk : 0) : 1 - S.lift * pk;
     let a = -S.g * sn * gMul + S.push * pw - S.dragK * this.v * this.v;
     // swing-like drive: pulling out of a dive low on the wall (bottom turn) or out of a climb
     // high on it (top turn). Only the part of the turn that still points down (up) counts, so a
@@ -184,16 +185,16 @@ export class Game {
     this.y += this.vy * dt;
     const H = w.H(this.x);
     this.apex = Math.max(this.apex, this.y - H);
+    const a0 = this.ang;
     if (this.held) {
-      const d = A.spin * DEG * dt;
-      this.ang -= d;
-      this.rot += d;
+      this.ang -= A.spin * DEG * dt;
       this.heldInAir = true;
     } else {
-      // settle towards the landing angle: quickly on a plain hop, slowly after a spin
-      const rate = this.heldInAir ? A.settle * 0.3 : A.settle;
-      this.ang += wrapAngle(this.refAngle() - this.ang) * (1 - Math.exp(-rate * dt));
+      // let go and the board swings on to the landing angle by the shorter way: finish most of
+      // a turn, release, and it completes itself
+      this.ang += wrapAngle(this.refAngle() - this.ang) * (1 - Math.exp(-A.settle * dt));
     }
+    this.rot += a0 - this.ang;
     if (this.y <= H && this.vy < 0) this.land(H);
   }
 
@@ -209,7 +210,8 @@ export class Game {
     // the flight itself is free height, not free speed: a clean landing keeps (most of) the
     // take-off speed, only a perfect one adds to it
     this.v = q === 'perfect' ? this.launchV * L.perfectMul + L.perfectAdd : this.launchV * L.cleanKeep;
-    this.th = clamp(Math.atan2(this.vy, this.vx), L.minHeading * DEG, 0);
+    // holding on touchdown carries the fall straight into a dive; otherwise the board levels out
+    this.th = clamp(Math.atan2(this.vy, this.vx) * (this.held ? 1 : 0.3), L.minHeading * DEG, 0);
     this.y = H - 0.5;
     this.mode = 'ride';
     this.modeT = 0;

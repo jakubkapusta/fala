@@ -166,3 +166,26 @@ button, .clickable { pointer-events: auto; }
   .stats { grid-template-columns: repeat(5, auto); }
   .tempo { margin-top: 12px; }
 }
+
+/* the button, visible (rhythm feedback) */
+.thumb {
+  position: absolute; left: 50%; bottom: calc(var(--safe-bot) + 18px); transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  opacity: 0; transition: opacity 0.3s;
+}
+.thumb.show { opacity: 0.8; }
+.thumb i {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.45); background: rgba(3, 22, 30, 0.25);
+  transition: background 0.06s, box-shadow 0.06s, transform 0.06s;
+}
+.thumb.on i { background: var(--sea); border-color: #e8fffb; box-shadow: 0 0 16px rgba(110, 240, 220, 0.8); transform: scale(0.88); }
+.thumb span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); opacity: 0; transition: opacity 0.06s; }
+.thumb.on span { opacity: 1; }
+.bot-tag {
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 64px); transform: translateX(-50%);
+  font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+  padding: 7px 14px; border-radius: 999px; background: rgba(3, 22, 30, 0.5); color: var(--sun);
+  opacity: 0; transition: opacity 0.3s;
+}
+.bot-tag.show { opacity: 1; }

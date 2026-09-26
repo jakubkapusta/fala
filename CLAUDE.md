@@ -25,14 +25,21 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 - `src/game/input.ts` — one button: any pointer down / space / ArrowDown = held; Esc = pause.
 - `src/game/save.ts` — `fala.meta.v1`, `fala.stats.v1` (every ride), `fala.hints.v1`; all storage access in try/catch.
 - `src/render/renderer.ts` — scene → bloom → composite. **M1: placeholder world** drawn with `shapes.ts` (flat triangles, premultiplied linear colours; `glow()` = additive). Visual-only randomness uses the renderer's own RNG.
-- `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close), pops, menu (with the M1 tempo test chips), pause, end screen with "Jeszcze raz" (< 1 s after the swallow).
+- `src/ui/ui.ts` + `src/style.css` — DOM HUD (metres, score, multiplier, closeout warning from wave data, edge darkening when the break is close, the button indicator at the bottom showing the pumping rhythm), pops, menu ("Zobacz, jak jeździ bot" = watch the bot, touch to take over; M1 tempo test chips), pause, end screen with "Jeszcze raz" (< 1 s after the swallow). Bot rides don't set records.
 - `src/sim/bot.ts` + `scripts/sim.ts` — the player model and the simulator.
 
 ## Pumping model (the heart of M1)
 
-A surfer riding straight gets only `push` and loses to the wave. Speed comes from committed pumps: a drive while **pulling out of a dive low on the wall** (`bottomDrive`, only while the heading still points down, fading above `bottomBand`) and **out of a climb high on it** (`topDrive`). Mashing the button doesn't pull out of anything, so it earns little; switching at about ⅓ and ⅔ of the wall and letting the turn carry you is optimal. `npm run sim -- --pump` prints steady speeds per strategy; keep rhythm ≫ mashing ≫ no input.
+Tuned to feel fast and forgiving after the owner's first test ("sluggish, climbing kills speed, can't land a spin").
+- Gravity along the face is asymmetric in the pocket: diving *while holding* is heavier (`press`), climbing is much lighter (`lift`: the wave lifts you), so going back up costs little.
+- The main drive comes from committed pumps: pulling out of a dive low on the wall (`bottomDrive`, only while the heading still points down) and out of a climb high on it (`topDrive`). Straight riding gets only a small `push`; mashing doesn't pull out of anything.
+- `npm run sim -- --pump` prints steady speeds per strategy; keep rhythm ≫ mashing ≫ no input.
 
-Airs: the lip adds `pop × pocket` to the vertical speed; flight is free height, not free speed — a clean landing keeps `cleanKeep` of the take-off speed, a perfect one multiplies it. A plain hop (no input in the air) always lands clean; holding spins the board and can wipe you out.
+Airs: the lip adds `pop × pocket` to the vertical speed. Holding spins the board (`spin`); letting go swings it on to the landing angle the shorter way (`settle`), so finishing most of a turn and releasing completes it. Windows: perfect ≤ 18°, clean ≤ 50°. Landing keeps the take-off speed (perfect ×1.12 + 40); **holding on touchdown carries the fall into a dive** (that's how you land with momentum), otherwise the board levels out. Rotation `rot` counts all forward rotation, held or settled.
+
+## Camera
+
+Largest zoom that fits: the wall + flight apex, `lookAhead` (0.65 real s) ahead, the break behind but never more than `maxBehind` (1.2 H) behind the surfer. Tall screens get a **vertical exaggeration** `ey` up to `stretch` (1.8): y is drawn taller than x. Physics is untouched; `Shapes.ey` keeps line widths, disks and the surfer figure round on screen (the figure is built in screen proportions, board angle mapped with `atan2(sin·ey, cos)`). Wide screens show at least `minWide` (5 H) across. Result: wall ≈ 20–25% of a portrait phone's height, ≈ 43% in landscape.
 
 ## Balance
 
@@ -44,7 +51,7 @@ npm run sim -- --trace 1007 --skill 0.5          # one ride, a line every 0.2 ga
 BAL='{"wave":{"open":{"vb":210}}}' npm run sim  # try knobs without editing
 ```
 
-Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s, closeouts passable with good play. Current (tempo 0.8): 47 s / 110 s / 261 s (71% reach night); skill 0.9 passes ~93% of closeouts. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 0.8 — changing `tempo` rescales real ride times.
+Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s (deliberately easier now), closeouts passable with good play. Current (tempo 1): 67 s / 131 s / 273 s (67% reach night); skill 0.9 passes ~97% of closeouts; flights ~0.6 s. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 1 — changing `tempo` rescales real ride times.
 
 ## Offline / PWA
 

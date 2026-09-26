@@ -1,6 +1,7 @@
 // Persistence. Every read and write is wrapped: storage can be missing, full or blocked.
 
-export type Meta = { v: 1; best: number; runs: number; tempo: number | null };
+/** `tempo2`: the M1 test tempo picked in the menu (the first physics' `tempo` is ignored on purpose) */
+export type Meta = { v: 1; best: number; runs: number; tempo2: number | null };
 export type RideStat = { date: string; time: number; meters: number; score: number; wipes: number; tricks: number; tempo: number };
 
 const KEY_META = 'fala.meta.v1';
@@ -23,7 +24,7 @@ function write(key: string, v: unknown) {
 
 export function loadMeta(): Meta {
   const m = read<Partial<Meta>>(KEY_META);
-  return { v: 1, best: m?.best ?? 0, runs: m?.runs ?? 0, tempo: m?.tempo ?? null };
+  return { v: 1, best: m?.best ?? 0, runs: m?.runs ?? 0, tempo2: m?.tempo2 ?? null };
 }
 export const saveMeta = (m: Meta) => write(KEY_META, m);
 

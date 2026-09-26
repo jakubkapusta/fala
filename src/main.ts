@@ -33,7 +33,7 @@ try {
 }
 
 const meta = loadMeta();
-if (meta.tempo) BAL.tempo = meta.tempo;
+if (meta.tempo2) BAL.tempo = meta.tempo2;
 const camera = new Camera();
 let mode: Mode = 'menu';
 let game: Game;
@@ -49,12 +49,13 @@ let realTime = 0;
 
 const ui = new Ui({
   start: () => startRide(),
+  watch: () => startRide(0.92),
   resume: () => resume(),
   menu: () => toMenu(),
   pause: () => pause(),
   setTempo: (t) => {
     BAL.tempo = t;
-    meta.tempo = t;
+    meta.tempo2 = t;
     saveMeta(meta);
     ui.showMenu(meta.best, BAL.tempo);
   },
@@ -63,7 +64,8 @@ ui.touch = matchMedia('(pointer: coarse)').matches;
 ui.showDebug = /debug/.test(hash) || !!balMatch;
 
 const input = new Input(canvas, {
-  gesture: () => {},
+  // a touch while the bot rides hands the board over
+  gesture: () => { if (mode === 'play' && auto && watching) { auto = null; watching = false; } },
   pause: () => (mode === 'play' ? pause() : mode === 'pause' ? resume() : undefined),
   enabled: () => mode === 'play',
 });
@@ -74,13 +76,19 @@ function newDemo() {
   camera.update(game, canvas.clientWidth, canvas.clientHeight, 0, true);
 }
 
-function startRide() {
-  meta.runs++;
-  saveMeta(meta);
+let watching = false;
+/** Start a ride; with `botSkill` the bot rides it (the player can take over by touching). */
+function startRide(botSkill?: number) {
+  if (botSkill === undefined) {
+    meta.runs++;
+    saveMeta(meta);
+  }
   const seed = (Date.now() ^ (performance.now() * 1000)) >>> 0;
   game = new Game(seed);
   demo = null;
-  if (auto) auto = new Bot(auto.skill, makeRng(seed));
+  watching = botSkill !== undefined;
+  if (watching) auto = new Bot(botSkill!, makeRng(seed));
+  else if (auto) auto = new Bot(auto.skill, makeRng(seed));
   mode = 'play';
   endShown = false;
   realTime = 0;
@@ -90,7 +98,7 @@ function startRide() {
   camera.update(game, canvas.clientWidth, canvas.clientHeight, 0, true);
   fade = 0.6;
   fadeTarget = 0;
-  if (!hintSeen('controls') || meta.runs <= 2) {
+  if (!watching && (!hintSeen('controls') || meta.runs <= 2)) {
     ui.hint(ui.touch ? '<b>Trzymaj</b> — w dół · <b>Puść</b> — w górę<br>Pompuj w rytmie fali, żeby przyspieszyć' : '<b>Trzymaj spację</b> — w dół · <b>Puść</b> — w górę<br>Pompuj w rytmie fali, żeby przyspieszyć', 6);
     markHint('controls');
   }
@@ -159,10 +167,10 @@ function checkEnd() {
   endShown = true;
   mode = 'end';
   input.reset();
-  const isBest = game.score > meta.best;
+  const isBest = !watching && game.score > meta.best;
   if (isBest) meta.best = game.score;
   saveMeta(meta);
-  logRide({ date: today(), time: Math.round(realTime), meters: Math.round(game.meters), score: game.score, wipes: game.wipes, tricks: game.tricks, tempo: BAL.tempo });
+  if (!watching) logRide({ date: today(), time: Math.round(realTime), meters: Math.round(game.meters), score: game.score, wipes: game.wipes, tricks: game.tricks, tempo: BAL.tempo });
   ui.showEnd({ game, best: meta.best, isBest, realTime });
 }
 
@@ -194,10 +202,11 @@ function frame(now: number) {
   } else if (mode === 'play' || mode === 'end') {
     const slowmo = game.slowT > 0 ? BAL.slowmo.scale : 1;
     const gdt = dt * BAL.tempo * slowmo;
-    game.update(gdt, mode === 'play' && (auto ? auto.step(game, gdt) : input.held));
+    const held = mode === 'play' && (auto ? auto.step(game, gdt) : input.held);
+    game.update(gdt, held);
     if (game.mode !== 'gone') realTime += dt * slowmo;
     handleEvents(game.events);
-    if (mode === 'play') ui.update(game, dt, { quality: renderer.quality, tempo: BAL.tempo });
+    if (mode === 'play') ui.update(game, dt, { quality: renderer.quality, tempo: BAL.tempo, held, bot: !!auto });
     checkEnd();
   }
   camera.update(game, canvas.clientWidth || innerWidth, canvas.clientHeight || innerHeight, dt);

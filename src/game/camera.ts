@@ -5,6 +5,7 @@
 // and pick the largest zoom that fits it. Spare width goes ahead of the surfer, spare height
 // is split between sky and the water in front of the wave. Zoom and framing ease on a spring,
 // but the camera follows the surfer's x rigidly (offsets are what springs), so nothing drifts.
+// On tall (portrait) screens y is drawn stretched (`ey` > 1) so the wall isn't a thin strip.
 
 import { BAL } from './balance';
 import type { Game } from './game';
@@ -14,8 +15,10 @@ export class Camera {
   /** world position of the screen centre */
   x = 0;
   y = 0;
-  /** css px per world unit */
+  /** css px per world unit along x; along y it's scale·ey */
   scale = 1;
+  /** vertical exaggeration (1 = none) */
+  ey = 1;
   /** visible size in world units */
   w = 0;
   h = 0;
@@ -37,16 +40,19 @@ export class Camera {
     if (g.mode === 'air') apex = Math.max(0, g.y + (g.vy > 0 ? (g.vy * g.vy) / (2 * BAL.air.g) : 0) - H0);
     this.apex += (apex - this.apex) * (apex > this.apex ? damp(6, dt) : damp(1.8, dt));
 
-    const left = Math.min(w.xb, g.x) - C.behind * H0;
+    const left = Math.max(Math.min(w.xb, g.x) - C.behind * H0, g.x - C.maxBehind * H0);
     const right = g.x + C.lookAhead * BAL.tempo * this.speed;
     let top = 0;
     for (let i = 0; i <= 8; i++) top = Math.max(top, w.H(left + ((right - left) * i) / 8));
     top = Math.max(top, g.y) + this.apex + C.above * H0;
     const bottom = -C.below * H0;
 
-    const needW = right - left, needH = top - bottom;
-    const scale = Math.min(cssW / needW, cssH / needH);
-    const viewW = cssW / scale, viewH = cssH / scale;
+    const tall = Math.min(1, Math.max(0, (cssH / cssW - 1) / 1.1));
+    const ey = 1 + (C.stretch - 1) * tall;
+    this.ey += (ey - this.ey) * k;
+    const needW = Math.max(right - left, C.minWide * H0 * (1 - tall)), needH = top - bottom;
+    const scale = Math.min(cssW / needW, cssH / (needH * this.ey));
+    const viewW = cssW / scale, viewH = cssH / (scale * this.ey);
     const cx = left + viewW / 2;
     const cy = bottom - (viewH - needH) * (1 - C.skyShare) + viewH / 2;
 
@@ -58,6 +64,6 @@ export class Camera {
     this.x = g.x + this.offX;
     this.y = this.offY;
     this.w = cssW / this.scale;
-    this.h = cssH / this.scale;
+    this.h = cssH / (this.scale * this.ey);
   }
 }

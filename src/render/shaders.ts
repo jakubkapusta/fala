@@ -44,7 +44,7 @@ void main(){
   vec3 c = mix(u_bot, u_top, smoothstep(0., 1., v_uv.y));
   vec2 d = (v_uv - u_sun) * vec2(u_res.x / u_res.y, 1.);
   float r = length(d);
-  c += vec3(1., .75, .45) * (exp(-r * r * 60.) * 1.5 + exp(-r * 6.) * .15);
+  c += vec3(1., .75, .45) * (exp(-r * r * 900.) * 3. + exp(-r * r * 40.) * .25 + exp(-r * 6.) * .08);
   o = vec4(c, 1.);
 }`;
 
