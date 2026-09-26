@@ -1,22 +1,22 @@
 // Every number that drives the ride, in one place. Rules read these, never literals.
 // The simulator (`npm run sim`) can override any of them without touching code:
-//   BAL='{"surf":{"push":260},"wave":{"close":{"vb":650}}}' npm run sim
+//   BAL='{"surf":{"push":80},"wave":{"close":{"vb":500}}}' npm run sim
 // In the browser the same JSON works in the URL: #bal={"surf":{"push":260}}
 //
-// Units: world units, y up. A mid wall is H ≈ 100. Speeds in units per *game* second;
+// Units: world units, y up. A mid wall is H ≈ 225. Speeds in units per *game* second;
 // `tempo` maps game time to real time (1 = the plan's speeds, 0.8 = everything 20% slower,
 // same trajectories). Angles in degrees.
 
 export const BAL = {
   /** game seconds per real second; scales the whole simulation, not its shape */
-  tempo: 1,
+  tempo: 0.9,
   unitsPerMeter: 25,
 
   wave: {
     /** section kinds: wall height range, length range, breaking speed, power multiplier, pick weight */
-    open: { H: [90, 115], len: [1400, 2600], vb: 320, power: 1, weight: 6 },
-    flat: { H: [58, 72], len: [900, 1500], vb: 260, power: 0.55, weight: 2 },
-    close: { H: [96, 125], len: [420, 700], vb: 500, power: 1.15, weight: 1.6 },
+    open: { H: [200, 250], len: [1400, 2600], vb: 320, power: 1, weight: 6 },
+    flat: { H: [130, 160], len: [900, 1500], vb: 260, power: 0.55, weight: 2 },
+    close: { H: [210, 270], len: [420, 700], vb: 500, power: 1.15, weight: 1.6 },
     /** units over which height / breaking speed blend at a section boundary */
     blend: 160,
     /** open sections at the start before anything else can appear */
@@ -32,12 +32,12 @@ export const BAL = {
 
   surf: {
     /** target heading when holding (down the face) / released (up the face) */
-    headDown: -48,
-    headUp: 40,
+    headDown: -40,
+    headUp: 34,
     /** heading turn rate (deg/s) */
-    turn: 320,
+    turn: 160,
     /** gravity along the face */
-    g: 800,
+    g: 420,
     /** wave push at full power (all a surfer riding straight gets) */
     push: 60,
     /** pumping, part 1: gravity ×(1 + press·pocket) while diving *and holding*, ×(1 − lift·pocket)
@@ -45,14 +45,25 @@ export const BAL = {
     press: 0.4,
     lift: 0.75,
     /** pumping, part 2 (the main one): drive while turning up near the bottom / down near the top.
-     *  Full between band[0] and the wall edge, fading to zero at band[1] (in y/H). */
-    bottomDrive: 1400,
-    bottomBand: [0.15, 0.55] as [number, number],
-    topDrive: 600,
+     *  Bottom turn: zero at the trough, full between band[1] and band[2], zero again at band[3] (y/H).
+     *  Top turn: zero below band[0], full above band[1]. */
+    bottomDrive: 1000,
+    bottomBand: [0.02, 0.14, 0.3, 0.55] as [number, number, number, number],
+    topDrive: 450,
     topBand: [0.5, 0.85] as [number, number],
     /** drag = dragK·v² (+ extra at the bottom / in foam, per second) */
     dragK: 0.0005,
-    bottomDrag: 0.5,
+    bottomDrag: 1.6,
+    /** the bottom drag fades in below this y/H */
+    flatZone: 0.08,
+    /** concave face: below y/H = concave the downward motion flattens out (to flatMin at the trough) */
+    concave: 0.3,
+    flatMin: 0.2,
+    /** hitting the trough faster than scrapeVy (vertical units/s): speed ×scrapeKeep, heading bounces
+     *  up to headUp·scrapeBounce */
+    scrapeVy: 30,
+    scrapeKeep: 0.75,
+    scrapeBounce: 0.5,
     foamDrag: 2.0,
     minSpeed: 90,
     maxSpeed: 1100,
@@ -70,7 +81,7 @@ export const BAL = {
     launchVy: 110,
     /** extra vertical kick from the lip, × pocket strength */
     pop: 200,
-    g: 1000,
+    g: 600,
     /** board rotation while holding (deg/s, forward = clockwise) */
     spin: 650,
     /** after letting go the board swings to the landing angle (shorter way) at this rate (1/s) */
@@ -114,21 +125,23 @@ export const BAL = {
 
   cam: {
     /** real seconds of travel visible ahead of the surfer */
-    lookAhead: 0.65,
+    lookAhead: 0.8,
+    /** …and this much while a closeout (later: an obstacle) is coming — the camera breathes out */
+    lookAheadHazard: 1.5,
     /** wall heights visible behind the break (foam) */
     behind: 0.45,
     /** but never more than this many wall heights behind the surfer (a far break isn't a threat) */
-    maxBehind: 1.2,
+    maxBehind: 1.0,
     /** water in front of the wave (in H) and headroom above the crest / flight apex */
     below: 0.3,
-    above: 0.3,
+    above: 0.4,
     /** share of spare vertical space that goes to the sky */
     skyShare: 0.6,
     /** vertical exaggeration on tall screens: y is drawn up to this much taller than x
      *  (1 on landscape, rising with the height/width ratio). Visual only, physics untouched. */
-    stretch: 1.8,
+    stretch: 1.4,
     /** on wide screens show at least this many wall heights across (fades out towards portrait) */
-    minWide: 5,
+    minWide: 3.5,
     /** zoom and framing spring rate (1/s) */
     spring: 3.2,
     /** minimum on-screen surfer height (css px) */

@@ -22,7 +22,7 @@ export class Bot {
   private wasWipe = false;
 
   constructor(readonly skill: number, private rng: Rng) {
-    this.react = lerp(0.24, 0.05, skill);
+    this.react = lerp(0.3, 0.14, skill); // human-like: ~0.3 s for a beginner, ~0.14 s for a sharp player
     // good players switch at about a third and two thirds of the wall and let the turn carry
     // them into a full pump; poor ones switch late and scrape the bottom / stall at the lip
     this.lo = lerp(0.15, 0.36, skill);

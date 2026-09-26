@@ -14,7 +14,7 @@ export type UiHooks = {
 
 export type EndInfo = { game: Game; best: number; isBest: boolean; realTime: number };
 
-const TEMPOS = [0.85, 1, 1.15];
+const TEMPOS = [0.8, 0.9, 1];
 
 const el = (html: string) => {
   const d = document.createElement('div');
@@ -38,6 +38,9 @@ export class Ui {
   private hintEl: HTMLElement;
   private debug: HTMLElement;
   private thumb: HTMLElement;
+  private preview: HTMLCanvasElement;
+  private pctx: CanvasRenderingContext2D | null;
+  private t = 0;
   private botTag: HTMLElement;
   private menuEl: HTMLElement;
   private pauseEl: HTMLElement;
@@ -64,6 +67,8 @@ export class Ui {
     this.popEl = el(`<div class="pop"></div>`);
     this.hintEl = el(`<div class="hint"></div>`);
     this.debug = el(`<div class="debug"></div>`);
+    this.preview = el(`<canvas class="preview"></canvas>`) as HTMLCanvasElement;
+    this.pctx = this.preview.getContext('2d');
     this.thumb = el(`<div class="thumb"><i></i><span>trzymasz</span></div>`);
     this.botTag = el(`<div class="bot-tag">Jedzie bot · dotknij, żeby przejąć</div>`);
     this.menuEl = el(`<div class="screen menu"></div>`);
@@ -75,7 +80,7 @@ export class Ui {
     this.pauseEl.querySelector('.resume')!.addEventListener('click', () => this.h.resume());
     this.pauseEl.querySelector('.to-menu')!.addEventListener('click', () => this.h.menu());
     this.endEl = el(`<div class="screen dim end"></div>`);
-    for (const e of [this.danger, this.hud, this.thumb, this.botTag, this.close, this.popEl, this.hintEl, this.debug, this.menuEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
+    for (const e of [this.danger, this.hud, this.preview, this.thumb, this.botTag, this.close, this.popEl, this.hintEl, this.debug, this.menuEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
   }
 
   hideScreens() {
@@ -151,6 +156,8 @@ export class Ui {
   }
 
   update(g: Game, dt: number, extra: { quality: number; tempo: number; held: boolean; bot: boolean }) {
+    this.t += dt;
+    this.drawPreview(g);
     // the button, visible: shows the pumping rhythm (yours or the bot's)
     this.thumb.classList.add('show');
     this.thumb.classList.toggle('on', extra.held);
@@ -189,7 +196,46 @@ export class Ui {
     }
   }
 
+  /** Mini preview of the wave ahead (about 4 real seconds), independent of the camera. */
+  private drawPreview(g: Game) {
+    const c = this.preview, ctx = this.pctx;
+    if (!ctx) return;
+    this.preview.classList.add('show');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cw = c.clientWidth, ch = c.clientHeight;
+    if (c.width !== Math.round(cw * dpr) || c.height !== Math.round(ch * dpr)) {
+      c.width = Math.round(cw * dpr);
+      c.height = Math.round(ch * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cw, ch);
+    const w = g.wave;
+    const span = 4 * BAL.tempo * Math.max(g.vxNow, w.vb, 150);
+    const x0 = g.x - span * 0.22, x1 = g.x + span;
+    const Hmax = 300, pad = 3, base = ch - pad;
+    const sx = (x: number) => ((x - x0) / (x1 - x0)) * cw;
+    const sy = (y: number) => base - (y / Hmax) * (ch - pad * 2);
+    const n = Math.max(20, Math.round(cw / 2));
+    const blink = 0.55 + 0.45 * Math.sin(this.t * 9);
+    for (let i = 0; i < n; i++) {
+      const x = x0 + ((i + 0.5) / n) * (x1 - x0);
+      const kind = w.sectionAt(x).kind;
+      ctx.fillStyle = x < w.xb ? 'rgba(235,245,245,0.85)'
+        : kind === 'close' ? `rgba(255,255,255,${0.5 + 0.5 * blink})`
+        : kind === 'flat' ? 'rgba(80,190,180,0.45)' : 'rgba(95,227,210,0.8)';
+      const top = sy(w.H(x));
+      ctx.fillRect((i / n) * cw, top, cw / n + 0.5, base - top);
+    }
+    // the surfer
+    const px = sx(g.x), py = sy(Math.max(0, g.y));
+    ctx.fillStyle = '#ffd08a';
+    ctx.beginPath();
+    ctx.arc(px, Math.max(3, py), 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   hideHud() {
+    this.preview.classList.remove('show');
     this.hud.classList.add('hidden');
     this.thumb.classList.remove('show');
     this.botTag.classList.remove('show');

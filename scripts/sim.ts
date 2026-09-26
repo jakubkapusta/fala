@@ -23,7 +23,7 @@ if (process.env.BAL) tuneBal(JSON.parse(process.env.BAL));
 
 type Ride = {
   skill: number; time: number; meters: number; score: number; wipes: number; airs: number; tricks: number; perfects: number;
-  lead: number; speed: number; air: number; night: boolean; closeDeath: boolean; wipeDeath: boolean; closes: number; closesPassed: number;
+  lead: number; speed: number; air: number; scrapes: number; window: number; cycle: number; night: boolean; closeDeath: boolean; wipeDeath: boolean; closes: number; closesPassed: number;
 };
 
 /** Degenerate inputs that must never beat real pumping (exploit guard). */
@@ -39,7 +39,9 @@ function ride(seed: number, skill: number, trace = false, policy?: (t: number) =
   const bot = new Bot(skill, makeRng(seed ^ 0xb07));
   const input = () => (policy ? policy(g.time / BAL.tempo) : bot.step(g, DT));
   const tempo = BAL.tempo;
-  let lastWipe = -99, airT = 0, launch = 0;
+  let lastWipe = -99, airT = 0, launch = 0, t13 = 0, lastDive = 0;
+  const wins: number[] = [], cycles: number[] = [];
+  let prevHeld = false;
   let closes = 0, closesPassed = 0, inClose = false, sec = 0;
   for (let t = 0; t < LIMIT * tempo; t += DT) {
     g.update(DT, input());
@@ -49,6 +51,15 @@ function ride(seed: number, skill: number, trace = false, policy?: (t: number) =
       if (e.t === 'land' || e.t === 'wipe') airT += g.time - launch;
     }
     g.events.length = 0;
+    if (g.mode === 'ride') {
+      // reaction window: from passing a third of the wall on the way down to the trough
+      const h = g.y / g.wave.H(g.x);
+      if (g.th < 0 && h < 0.34 && h > 0.3 && !t13) t13 = g.time;
+      if (t13 && h <= 0.001) { wins.push(g.time - t13); t13 = 0; }
+      if (g.th >= 0) t13 = 0;
+      if (g.held && !prevHeld) { if (lastDive) cycles.push(g.time - lastDive); lastDive = g.time; }
+    } else lastDive = 0;
+    prevHeld = g.held;
     const s = g.wave.sectionAt(g.x);
     const nowClose = s.kind === 'close';
     if (nowClose && !inClose) closes++;
@@ -64,11 +75,13 @@ function ride(seed: number, skill: number, trace = false, policy?: (t: number) =
   const bs = g.wave.sectionAt(g.wave.xb);
   return {
     skill, time, meters: g.meters, score: g.score, wipes: g.wipes, airs: g.airs, tricks: g.tricks, perfects: g.perfects,
-    lead: g.leadSum / Math.max(g.time, 1e-6), speed: (g.x - g.x0) / Math.max(g.time, 1e-6), air: airT / Math.max(1, g.airs) / tempo,
+    lead: g.leadSum / Math.max(g.time, 1e-6), speed: (g.x - g.x0) / Math.max(g.time, 1e-6), air: airT / Math.max(1, g.airs) / tempo, scrapes: g.scrapes / Math.max(time, 1) * 60,
+    window: med(wins) / tempo, cycle: med(cycles.filter((c) => c < 5)) / tempo,
     night: time > 240, closeDeath: g.mode === 'gone' && (bs.kind === 'close' || inClose), wipeDeath: g.mode === 'gone' && g.time - lastWipe < 3, closes, closesPassed,
   };
 }
 
+const med = (a: number[]) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
 const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
 
@@ -81,6 +94,7 @@ function report(label: string, rs: Ride[]) {
       `  | night ${f((100 * rs.filter((r) => r.night).length) / rs.length).padStart(3)}%  capped ${capped}` +
       `  | ${f(mean(rs.map((r) => r.meters))).padStart(5)} m  score ${f(mean(rs.map((r) => r.score))).padStart(6)}` +
       `  | v ${f(mean(rs.map((r) => r.speed * BAL.tempo))).padStart(3)}/s  lead ${f(mean(rs.map((r) => r.lead)), 2)}H` +
+      `  | scrapes/min ${f(mean(rs.map((r) => r.scrapes)), 1)} ⅓→trough ${f(mean(rs.map((r) => r.window).filter((x) => x === x)), 2)}s cycle ${f(mean(rs.map((r) => r.cycle).filter((x) => x === x)), 2)}s` +
       `  | wipes ${f(mean(rs.map((r) => r.wipes)), 1)} airs ${f(mean(rs.map((r) => r.airs)), 0)} (${f(mean(rs.filter((r) => r.airs).map((r) => r.air)), 2)}s) tricks ${f(mean(rs.map((r) => r.tricks)), 1)} perf ${f(mean(rs.map((r) => r.perfects)), 1)}` +
       `  | deaths: close ${f((100 * cD) / rs.length)}% after-wipe ${f((100 * wD) / rs.length)}%` +
       `  | closeouts ${f(mean(rs.map((r) => r.closesPassed)), 1)}/${f(mean(rs.map((r) => r.closes)), 1)}`,

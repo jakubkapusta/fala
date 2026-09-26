@@ -12,7 +12,7 @@ import { BAL } from '../game/balance';
 import { clamp, smoothstep } from '../core/math';
 
 type Spark = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; foam: boolean };
-type Flash = { x: number; y: number; t: number; kind: 'perfect' | 'clean' | 'wipe' };
+type Flash = { x: number; y: number; t: number; kind: 'perfect' | 'clean' | 'wipe' | 'scrape' };
 
 const DEEP = solid(0.004, 0.028, 0.042);
 const BODY = solid(0.012, 0.1, 0.12);
@@ -89,7 +89,7 @@ export class Renderer {
   /** A landing / wipeout burst at a world position. */
   impact(kind: Flash['kind'], x: number, y: number) {
     this.flashes.push({ x, y, t: 0, kind });
-    const n = kind === 'wipe' ? 40 : kind === 'perfect' ? 30 : 14;
+    const n = kind === 'wipe' ? 40 : kind === 'perfect' ? 30 : kind === 'scrape' ? 24 : 14;
     for (let i = 0; i < n * this.quality; i++) {
       const a = Math.PI * (0.1 + 0.8 * this.r()), sp = 60 + this.r() * (kind === 'wipe' ? 260 : 200);
       this.sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0, max: 0.5 + this.r() * 0.5, size: 2 + this.r() * 3, foam: true });
@@ -247,7 +247,7 @@ export class Renderer {
 
   private drawSurfer(g: Game, cam: Camera) {
     const sh = this.shapes, px = 1 / cam.scale;
-    const S = Math.max(26, BAL.cam.minSurferPx * px); // figure height in x-units
+    const S = Math.max(40, BAL.cam.minSurferPx * px); // figure height in x-units
     const wipe = g.mode === 'wipe' || g.mode === 'gone';
     // the figure is built in unstretched screen proportions: angles as they look on screen,
     // local y offsets squashed back by ey when placed in the world

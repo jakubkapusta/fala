@@ -189,3 +189,12 @@ button, .clickable { pointer-events: auto; }
   opacity: 0; transition: opacity 0.3s;
 }
 .bot-tag.show { opacity: 1; }
+
+/* mini preview of the wave ahead */
+.preview {
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 14px); transform: translateX(-50%);
+  width: min(44vw, 260px); height: 30px; border-radius: 8px;
+  background: rgba(3, 22, 30, 0.35); border: 1px solid rgba(255, 255, 255, 0.12);
+  opacity: 0; transition: opacity 0.3s;
+}
+.preview.show { opacity: 1; }

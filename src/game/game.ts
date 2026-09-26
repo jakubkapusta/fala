@@ -12,6 +12,7 @@ export type GameEvent =
   | { t: 'land'; q: LandQ; halfTurns: number; pts: number; mult: number; trick: boolean }
   | { t: 'wipe' }
   | { t: 'recover' }
+  | { t: 'scrape' }
   | { t: 'gone' };
 
 export class Game {
@@ -47,6 +48,7 @@ export class Game {
   trickPts = 0;
   mult = 1;
   wipes = 0;
+  scrapes = 0;
   perfects = 0;
   airs = 0;
   tricks = 0;
@@ -116,12 +118,15 @@ export class Game {
     const th0 = this.th;
     this.th += clamp(target - this.th, -step, step);
     const turned = (this.th - th0) / (S.turn * DEG * dt); // -1..1: fraction of a full-rate turn
-    if (this.y <= 0 && this.th < 0) this.th = 0;
 
     const foam = w.foam(this.x);
     const pw = foam ? 0 : w.power(this.x, this.y);
     const pk = foam ? 0 : w.pocket(this.x);
-    const sn = Math.sin(this.th);
+    // the face is concave: towards the trough it flattens out, so a dive rounds off into the
+    // flat instead of stabbing the bottom (sn = vertical share of the motion along the face)
+    const h0 = this.y / w.H(this.x);
+    const sth = Math.sin(this.th);
+    const sn = sth < 0 ? sth * Math.max(S.flatMin, smoothstep(0, S.concave, h0)) : sth;
     // pumping: heavy on the way down, light on the way up (the face lifts the surfer)
     // (pressing only counts while the player is actually holding)
     const gMul = sn < 0 ? 1 + (this.held ? S.press * pk : 0) : 1 - S.lift * pk;
@@ -131,14 +136,29 @@ export class Game {
     // full, committed pump pays and jittering the button in place doesn't.
     const h = this.y / w.H(this.x);
     const steep = Math.max(0, turned > 0 ? -sn : sn) / Math.sin(S.headUp * DEG);
-    if (turned > 0) a += S.bottomDrive * pk * turned * steep * smoothstep(S.bottomBand[1], S.bottomBand[0], h);
+    // the bottom turn pays best a little above the trough, not on it
+    const bb = S.bottomBand;
+    if (turned > 0) a += S.bottomDrive * pk * turned * steep * smoothstep(bb[0], bb[1], h) * smoothstep(bb[3], bb[2], h);
     else if (turned < 0) a -= S.topDrive * pk * turned * steep * smoothstep(S.topBand[0], S.topBand[1], h);
-    if (this.y <= 1) a -= S.bottomDrag * this.v;
+    // flat, slow water at the foot of the wave
+    a -= S.bottomDrag * this.v * smoothstep(S.flatZone, 0, h0);
     if (foam) a -= S.foamDrag * this.v;
     this.v = clamp(this.v + a * dt, S.minSpeed, S.maxSpeed);
 
-    this.x += this.v * Math.cos(this.th) * dt;
-    this.y = Math.max(0, this.y + this.v * sn * dt);
+    this.x += this.v * Math.sqrt(1 - sn * sn) * dt;
+    this.y += this.v * sn * dt;
+    if (this.y <= 0) {
+      this.y = 0;
+      if (this.th < 0) {
+        // dug into the flat water at the foot of the wave: lose speed, bounce back up
+        if (-this.v * sn > S.scrapeVy) {
+          this.v = Math.max(S.minSpeed, this.v * S.scrapeKeep);
+          this.scrapes++;
+          this.events.push({ t: 'scrape' });
+        }
+        this.th = S.headUp * DEG * S.scrapeBounce;
+      }
+    }
     const H = w.H(this.x);
     if (this.y >= H) {
       const vy = this.v * Math.sin(this.th);

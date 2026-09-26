@@ -30,16 +30,17 @@ Dev helper: `window.__fala` — `game`, `camera`, `renderer`, `BAL`, `auto(0.8)`
 
 ## Pumping model (the heart of M1)
 
-Tuned to feel fast and forgiving after the owner's first test ("sluggish, climbing kills speed, can't land a spin").
-- Gravity along the face is asymmetric in the pocket: diving *while holding* is heavier (`press`), climbing is much lighter (`lift`: the wave lifts you), so going back up costs little.
-- The main drive comes from committed pumps: pulling out of a dive low on the wall (`bottomDrive`, only while the heading still points down) and out of a climb high on it (`topDrive`). Straight riding gets only a small `push`; mashing doesn't pull out of anything.
-- `npm run sim -- --pump` prints steady speeds per strategy; keep rhythm ≫ mashing ≫ no input.
+Second owner test: "too fast, can't release before hitting the bottom; the wave is a thin strip; hitting the bottom doesn't matter". So the wall is physically tall (H ≈ 200–270) relative to forward speed, with slow turns (`turn` 160°/s): passing ⅓ of the wall on the way down leaves ~0.4–0.6 s before the trough, a full pump cycle takes ~2 s.
+- Gravity along the face is asymmetric in the pocket: diving *while holding* is heavier (`press`), climbing much lighter (`lift`: the wave lifts you).
+- The main drive comes from committed pumps: pulling out of a dive a little above the trough (`bottomDrive`, band `bottomBand` — zero at the trough, full at 14–30% of the wall) and out of a climb high on the wall (`topDrive`). Straight riding gets only a small `push`; mashing doesn't pull out of anything.
+- **Concave face:** below `concave` (30% of the wall) the downward motion flattens out, so a late release rounds off into the flat instead of stabbing the bottom. The flat (`flatZone`) drags (`bottomDrag`); hitting the trough faster than `scrapeVy` = **scrape** ("Dno!"): speed ×`scrapeKeep`, bounce up.
+- `npm run sim -- --pump` prints steady speeds per strategy; keep rhythm ≫ mashing ≫ no input. The sim also reports scrapes/min, the ⅓→trough window and the pump cycle; the bot reacts like a human (0.3 s → 0.14 s by skill).
 
-Airs: the lip adds `pop × pocket` to the vertical speed. Holding spins the board (`spin`); letting go swings it on to the landing angle the shorter way (`settle`), so finishing most of a turn and releasing completes it. Windows: perfect ≤ 18°, clean ≤ 50°. Landing keeps the take-off speed (perfect ×1.12 + 40); **holding on touchdown carries the fall into a dive** (that's how you land with momentum), otherwise the board levels out. Rotation `rot` counts all forward rotation, held or settled.
+Airs: the lip adds `pop × pocket` to the vertical speed (flights ~1 s). Holding spins the board (`spin`); letting go swings it on to the landing angle the shorter way (`settle`), so finishing most of a turn and releasing completes it. Windows: perfect ≤ 18°, clean ≤ 50°. Landing keeps the take-off speed (perfect ×1.12 + 40); **holding on touchdown carries the fall into a dive** (landing with momentum), otherwise the board levels out.
 
 ## Camera
 
-Largest zoom that fits: the wall + flight apex, `lookAhead` (0.65 real s) ahead, the break behind but never more than `maxBehind` (1.2 H) behind the surfer. Tall screens get a **vertical exaggeration** `ey` up to `stretch` (1.8): y is drawn taller than x. Physics is untouched; `Shapes.ey` keeps line widths, disks and the surfer figure round on screen (the figure is built in screen proportions, board angle mapped with `atan2(sin·ey, cos)`). Wide screens show at least `minWide` (5 H) across. Result: wall ≈ 20–25% of a portrait phone's height, ≈ 43% in landscape.
+Largest zoom that fits: the wall + flight apex, `lookAhead` (0.8 real s) ahead — `lookAheadHazard` (1.5 s) while a closeout is coming, so the camera breathes out — and the break behind but never more than `maxBehind` (1 H) behind the surfer. Tall screens get a **vertical exaggeration** `ey` up to `stretch` (1.4): y is drawn taller than x; physics untouched; `Shapes.ey` keeps widths, disks and the surfer figure round on screen. Wide screens show at least `minWide` (3.5 H) across. Wall ≈ 33% of a portrait phone's height, ≈ 60% in landscape. The **mini preview** (HUD canvas, top centre) shows the crest profile ~4 real s ahead from wave data: closeouts blink white, flats are dim, foam behind the break, the surfer as a dot.
 
 ## Balance
 
@@ -51,7 +52,7 @@ npm run sim -- --trace 1007 --skill 0.5          # one ride, a line every 0.2 ga
 BAL='{"wave":{"open":{"vb":210}}}' npm run sim  # try knobs without editing
 ```
 
-Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s (deliberately easier now), closeouts passable with good play. Current (tempo 1): 67 s / 131 s / 273 s (67% reach night); skill 0.9 passes ~97% of closeouts; flights ~0.6 s. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 1 — changing `tempo` rescales real ride times.
+Targets (plan): skill 0.5 mean 90–150 s, skill 0.9 regularly past 240 s, skill 0.2 ≥ 40 s (deliberately easier now), closeouts passable with good play. Current (tempo 0.9): see `npm run sim` — about 50 s / 150 s / 250 s, ~half of skill-0.9 rides reach night. The difficulty ramp (`vbRamp`, `rampLen`) decides when everyone eventually loses; breaking speeds decide the spread. Tuned at tempo 0.9 — changing `tempo` rescales real ride times.
 
 ## Offline / PWA
 

@@ -33,7 +33,7 @@ try {
 }
 
 const meta = loadMeta();
-if (meta.tempo2) BAL.tempo = meta.tempo2;
+if (meta.tempo3) BAL.tempo = meta.tempo3;
 const camera = new Camera();
 let mode: Mode = 'menu';
 let game: Game;
@@ -55,7 +55,7 @@ const ui = new Ui({
   pause: () => pause(),
   setTempo: (t) => {
     BAL.tempo = t;
-    meta.tempo2 = t;
+    meta.tempo3 = t;
     saveMeta(meta);
     ui.showMenu(meta.best, BAL.tempo);
   },
@@ -148,6 +148,11 @@ function handleEvents(events: GameEvent[]) {
           renderer.impact('clean', game.x, game.y);
           if (e.trick) ui.pop(`${e.halfTurns >= 2 ? `${e.halfTurns * 180}°` : 'Wysoko!'}<small>+${e.pts.toLocaleString('pl-PL')}</small>`);
         }
+        break;
+      case 'scrape':
+        renderer.impact('scrape', game.x, game.y);
+        ui.pop('Dno!', 'wipe');
+        vibrate(25);
         break;
       case 'wipe':
         renderer.impact('wipe', game.x, game.y);

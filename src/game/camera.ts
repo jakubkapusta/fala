@@ -1,6 +1,6 @@
 // Adaptive framing. Every frame we work out the world rectangle that must be visible
 //   1. the whole wall plus room for the flight (apex predicted from the vertical speed),
-//   2. `lookAhead` real seconds of travel in front of the surfer,
+//   2. `lookAhead` real seconds of travel in front of the surfer (more when a hazard is coming),
 //   3. the break and a bit of foam behind the surfer (the chase),
 // and pick the largest zoom that fits it. Spare width goes ahead of the surfer, spare height
 // is split between sky and the water in front of the wave. Zoom and framing ease on a spring,
@@ -26,6 +26,7 @@ export class Camera {
   private offY = 0;
   private apex = 0;
   private speed = 0;
+  private look = 0;
   private init = false;
 
   update(g: Game, cssW: number, cssH: number, dt: number, snap = false) {
@@ -41,7 +42,11 @@ export class Camera {
     this.apex += (apex - this.apex) * (apex > this.apex ? damp(6, dt) : damp(1.8, dt));
 
     const left = Math.max(Math.min(w.xb, g.x) - C.behind * H0, g.x - C.maxBehind * H0);
-    const right = g.x + C.lookAhead * BAL.tempo * this.speed;
+    // breathe out ahead of a hazard so there's time to see it coming
+    const hazard = g.closeAhead(2.5 * BAL.tempo) !== null || w.sectionAt(g.x).kind === 'close';
+    const look = hazard ? C.lookAheadHazard : C.lookAhead;
+    this.look = this.init && !snap ? this.look + (look - this.look) * damp(1.2, dt) : look;
+    const right = g.x + this.look * BAL.tempo * this.speed;
     let top = 0;
     for (let i = 0; i <= 8; i++) top = Math.max(top, w.H(left + ((right - left) * i) / 8));
     top = Math.max(top, g.y) + this.apex + C.above * H0;
