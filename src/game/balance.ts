@@ -22,9 +22,9 @@ export const BAL = {
     /** open sections at the start before anything else can appear */
     warmup: 3,
     /** difficulty ramps 0 → 1 over this many units of break travel */
-    rampLen: 190000,
+    rampLen: 170000,
     /** at full difficulty: breaking speed ×(1 + vbRamp), closeout weight ×(1 + closeRamp) */
-    vbRamp: 0.55,
+    vbRamp: 0.6,
     closeRamp: 1,
     /** a closeout never follows a closeout and needs this much open/flat wall before it */
     closeGap: 1200,
@@ -102,6 +102,9 @@ export const BAL = {
      *  heading right after landing = flight direction clamped to [minHeading, maxHeading] (deg),
      *  then `dive` game s of riding down the face regardless of input */
     armWindow: 0.3,
+    /** an armed dive lands "perfect" (speed-up) only if the press came within this many game s of
+     *  touchdown (and the board is lined up); earlier presses still dive, but land just "clean" */
+    perfectWindow: 0.18,
     minHeading: -60,
     maxHeading: -20,
     dive: 0.25,

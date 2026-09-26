@@ -20,6 +20,7 @@ export class Bot {
   private diveAfter = false;
   private goAir = false;
   private armDive = false;
+  private armAt = 0;
   private wasWipe = false;
 
   constructor(readonly skill: number, private rng: Rng) {
@@ -62,7 +63,7 @@ export class Bot {
       const A = BAL.air;
       const H = g.wave.H(g.x);
       const tLand = g.vy < 0 ? (g.vy + Math.sqrt(g.vy * g.vy + 2 * A.g * Math.max(0, g.y - H))) / A.g : Infinity;
-      this.held = g.rot < this.spinTarget || (this.armDive && tLand < BAL.land.armWindow * 0.8);
+      this.held = g.rot < this.spinTarget || (this.armDive && tLand < this.armAt);
     } else if (g.mode === 'wipe') {
       // most players get ready to drop back down while climbing onto the board
       this.held = this.diveAfter;
@@ -76,6 +77,8 @@ export class Bot {
   private planAir(g: Game) {
     this.spinTarget = 0;
     this.armDive = this.rng() < 0.3 + 0.6 * this.skill;
+    // aim for the perfect window; the bot's reaction ticks add the timing error a person would have
+    this.armAt = Math.min(BAL.land.armWindow * 0.9, BAL.land.perfectWindow * lerp(1.5, 0.8, this.skill));
     const A = BAL.air;
     const tAir = (2 * g.vy) / A.g;
     const flightLand = -Math.atan2(g.vy, g.vx);

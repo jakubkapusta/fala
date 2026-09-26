@@ -47,6 +47,8 @@ export class Game {
   /** held in the last moments of a flight: the landing turns into a dive */
   armed = false;
   private heldPrev = false;
+  /** time to touchdown when the dive was armed (game s) */
+  armT = 0;
 
   // score
   x0: number;
@@ -219,7 +221,10 @@ export class Game {
     const tLand = this.vy < 0 ? (this.vy + Math.sqrt(disc)) / A.g : Infinity;
     // a fresh press just before touchdown arms the dive; the board keeps swinging to the landing
     // angle meanwhile. Holding a spin non-stop into the water keeps spinning (and may wipe you out).
-    if (this.held && !this.heldPrev && tLand < BAL.land.armWindow) this.armed = true;
+    if (this.held && !this.heldPrev && tLand < BAL.land.armWindow) {
+      this.armed = true;
+      this.armT = tLand;
+    }
     this.heldPrev = this.held;
     if (this.held && !this.armed) {
       this.ang -= A.spin * DEG * dt;
@@ -240,7 +245,9 @@ export class Game {
     let q: LandQ | null = diff <= L.perfect ? 'perfect' : diff <= L.clean ? 'clean' : null;
     // a plain hop (no input in the air) always lands, but is never "perfect"; a hop carried
     // straight into a dive (armed, board lined up) is
-    if (!this.heldInAir && !this.armed) q = 'clean';
+    // (only when the press came within `perfectWindow` of the touchdown)
+    if (!this.heldInAir && !(this.armed && this.armT <= L.perfectWindow)) q = 'clean';
+    if (this.armed && this.armT > L.perfectWindow && q === 'perfect' && !this.heldInAir) q = 'clean';
     if (!q) return this.wipeout();
 
     // the flight itself is free height, not free speed: a clean landing keeps (most of) the

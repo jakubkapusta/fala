@@ -4,7 +4,7 @@
 
 import { tuneBal } from './balance';
 
-export type TestKey = 'tempo' | 'turn' | 'angle' | 'air';
+export type TestKey = 'tempo' | 'turn' | 'angle' | 'air' | 'perfect';
 export type TestSel = Record<TestKey, string>;
 type Option = { id: string; label: string; bal: Record<string, unknown> };
 
@@ -43,6 +43,15 @@ export const TEST_GROUPS: { key: TestKey; label: string; def: string; options: O
       { id: 'low', label: 'niskie', bal: { surf: { lift: 0.75 }, air: { pop: 200, g: 600 } } },
       { id: 'high', label: 'wysokie', bal: { surf: { lift: 0.85 }, air: { pop: 320, g: 600 } } },
       { id: 'vhigh', label: 'b. wysokie', bal: { surf: { lift: 0.85 }, air: { pop: 450, g: 520 } } },
+    ],
+  },
+  {
+    // windows in game s; at tempo 1.2 that's ≈ 0.25 / 0.15 / 0.08 real s before touchdown
+    key: 'perfect', label: 'Idealne', def: 'mid',
+    options: [
+      { id: 'easy', label: 'łatwe', bal: { land: { perfectWindow: 0.3 } } },
+      { id: 'mid', label: 'średnie', bal: { land: { perfectWindow: 0.18 } } },
+      { id: 'hard', label: 'trudne', bal: { land: { perfectWindow: 0.1 } } },
     ],
   },
 ];
