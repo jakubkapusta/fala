@@ -4,7 +4,7 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **M4 (meta) in progress:** first complete version pushed 2026-09-26 — spots, levels with stars, boards and looks, daily wave, records. Waiting for the owner's test.
+- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **M3 accepted** 2026-09-26 (owner: obstacle count fine, may grow more with time → steeper ramp). **M4 accepted** 2026-09-26 (balance OK for now). **Now: M5** — storm, full bioluminescence, slow motion emphasis, tube-exit spray, weak-phone performance, offline check. **No photo mode** (owner: not needed).
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
 
