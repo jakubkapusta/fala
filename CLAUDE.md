@@ -4,7 +4,7 @@ Browser game (phone portrait **and** landscape, laptop too): one-thumb surfing a
 
 ## Status (read first)
 
-- **M0 done, M1 done** (accepted by the owner 2026-09-26). **M2 (the water) in progress** since 2026-09-26: first version pushed (415b950); after feedback (sun washed out the surfer, stick figure, flat lower face) a90dd70. Waiting for the next round. Milestones and acceptance criteria are in `docs/PLAN.md`; the supervisor/owner checks the result after each one.
+- **M0, M1, M2 done** (M1 accepted 2026-09-26; M2 accepted 2026-09-26 after two rounds of feedback: surfer washed out by the sun → own layer over the bloom; stick figure → posed silhouette; flat lower face → foam lines; board too small → shortboard ~1.15× the surfer's height). **Now: M3** (full ride: all section types, tube, obstacles and helpers, shells, scoring, sound, hints).
 - Workflow: the owner tests on a phone (portrait and landscape) from GitHub Pages, gives feel feedback in Polish; iterate in small commits, push, describe what changed and why. Numbers in `docs/PLAN.md` were explicitly guesses ("zgadywanka") — the values below were tuned with the owner and supersede them.
 - Local preview: `.claude/launch.json` lives one level up in `~/code` (entries `fala` → port 5181 dev, `fala-dist` → 4181 preview).
 
