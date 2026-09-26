@@ -153,7 +153,7 @@ export const BAL = {
     /** zoom and framing spring rate (1/s) */
     spring: 3.2,
     /** minimum on-screen surfer height (css px) */
-    minSurferPx: 30,
+    minSurferPx: 36,
   },
 };
 

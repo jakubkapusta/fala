@@ -58,6 +58,22 @@ export class Shapes {
     this.disk(bx, by, w / 2, c, 8);
   }
 
+  /** Tapered limb: width wa at a, wb at b, round ends. */
+  taper(ax: number, ay: number, bx: number, by: number, wa: number, wb: number, c: Col, n = 8) {
+    const e = this.ey;
+    const dx = bx - ax, dy = (by - ay) * e, l = Math.hypot(dx, dy) || 1;
+    const px = -dy / l, py = dx / l / e;
+    const ha = wa * 0.5, hb = wb * 0.5;
+    this.quad(ax + px * ha, ay + py * ha, bx + px * hb, by + py * hb, bx - px * hb, by - py * hb, ax - px * ha, ay - py * ha, c);
+    this.disk(ax, ay, ha, c, n);
+    this.disk(bx, by, hb, c, n);
+  }
+
+  /** Convex polygon (flat [x0, y0, x1, y1, …]) as a fan. */
+  poly(p: number[], c: Col) {
+    for (let i = 2; i + 3 < p.length; i += 2) this.tri(p[0], p[1], p[i], p[i + 1], p[i + 2], p[i + 3], c);
+  }
+
   disk(x: number, y: number, r: number, c: Col, n = 16, edge?: Col) {
     const e = edge ?? c;
     let px = x + r, py = y;

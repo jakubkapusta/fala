@@ -12,6 +12,7 @@ import type { Camera } from '../game/camera';
 import { BAL } from '../game/balance';
 import { clamp } from '../core/math';
 import { palette, type Palette } from './daycycle';
+import { drawSurfer } from './surfer';
 
 type Kind = 'spray' | 'drop' | 'mist' | 'lip';
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; kind: Kind; g: number };
@@ -23,7 +24,6 @@ const D0 = 2600;
 /** columns of wave data sent to the shader */
 const COLS = 256;
 const MAX_PARTICLES = 900;
-const INK = solid(0.008, 0.01, 0.016);
 
 export class Renderer {
   gl: GL;
@@ -33,6 +33,8 @@ export class Renderer {
   W = 0;
   H = 0;
   private scene: Target;
+  /** the surfer, composited over the bloomed scene so a bright sun behind can't wash it out */
+  private fg: Target;
   private bloom: Target[];
   private pWorld: Program;
   private pFlat: Program;
@@ -42,6 +44,7 @@ export class Renderer {
   private pComp: Program;
   private emptyVao: WebGLVertexArrayObject;
   private shapes: Shapes;
+  private fig: Shapes;
   private sprites: DynBuffer;
   private colTex: WebGLTexture;
   private colData = new Float32Array(COLS * 4);
@@ -60,6 +63,7 @@ export class Renderer {
     this.hdr = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
     gl.getExtension('OES_texture_float_linear');
     this.scene = new Target(gl, this.hdr);
+    this.fg = new Target(gl, this.hdr);
     this.bloom = [0, 1, 2, 3, 4].map(() => new Target(gl, this.hdr));
     this.pWorld = new Program(gl, S.FULLSCREEN_VS, S.WORLD_FS, 'world');
     this.pFlat = new Program(gl, S.FLAT_VS, S.FLAT_FS, 'flat');
@@ -69,6 +73,7 @@ export class Renderer {
     this.pComp = new Program(gl, S.FULLSCREEN_VS, S.COMPOSITE_FS, 'comp');
     this.emptyVao = gl.createVertexArray()!;
     this.shapes = new Shapes(gl);
+    this.fig = new Shapes(gl);
 
     const quad = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
@@ -89,8 +94,7 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 256, 256, 0, gl.RED, gl.UNSIGNED_BYTE, nz);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
@@ -121,6 +125,7 @@ export class Renderer {
     this.canvas.width = W;
     this.canvas.height = H;
     this.scene.resize(W, H);
+    this.fg.resize(W, H);
     let bw = W / 2, bh = H / 2;
     for (const b of this.bloom) {
       b.resize(bw, bh);
@@ -162,7 +167,6 @@ export class Renderer {
     sh.ey = cam.ey;
     this.drawTrail(g, cam, P);
     this.drawRings(cam);
-    this.drawSurfer(g, cam, P);
     sh.buf.upload();
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -170,6 +174,19 @@ export class Renderer {
     gl.bindVertexArray(sh.buf.vao);
     gl.drawArrays(gl.TRIANGLES, 0, sh.buf.count);
     this.drawParticles(cam, P);
+
+    this.fg.bind();
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const fig = this.fig;
+    fig.reset();
+    fig.ey = cam.ey;
+    const sunVis = clamp((P.sunY + 0.03) / 0.06, 0, 1) * clamp(P.sun[0] / 2, 0, 1);
+    drawSurfer(fig, g, cam, P, this.t, sunVis > 0.2 ? P.sunX : P.moonX);
+    fig.buf.upload();
+    this.pFlat.use();
+    gl.bindVertexArray(fig.buf.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, fig.buf.count);
     gl.disable(gl.BLEND);
 
     // shockwave from the latest perfect landing
@@ -243,51 +260,6 @@ export class Renderer {
       const c = f.kind === 'perfect' ? glow(1, 0.9, 0.55, 2.5 * (1 - k)) : f.kind === 'clean' ? glow(0.6, 1, 0.95, 1.2 * (1 - k)) : glow(0.8, 0.9, 1, 0.8 * (1 - k));
       sh.ring(f.x, f.y, 6 + k * (f.kind === 'perfect' ? 70 : 40), (3 - k * 2) * px * 2, c, 28);
     }
-  }
-
-  private drawSurfer(g: Game, cam: Camera, P: Palette) {
-    const sh = this.shapes, px = 1 / cam.scale;
-    const S = Math.max(40, BAL.cam.minSurferPx * px); // figure height in x-units
-    const wipe = g.mode === 'wipe' || g.mode === 'gone';
-    // the figure is built in unstretched screen proportions: angles as they look on screen,
-    // local y offsets squashed back by ey when placed in the world
-    const e = cam.ey;
-    const b = Math.atan2(Math.sin(g.board) * e, Math.cos(g.board));
-    const ux = Math.cos(b), uy = Math.sin(b) / e;
-    const nx = -Math.sin(b), ny = Math.cos(b) / e;
-    const x = g.x, y = g.y + (S * 0.04) / e;
-    const crouch = g.mode === 'air' ? 0.55 : g.crouch;
-    const rim = S * 0.07;
-    // rim light from whatever is behind the wave (sun, moon), never too dim to read
-    const rl = Math.max(P.back[0], P.back[1], P.back[2], 0.001);
-    const rs = Math.max(1.1, rl) / rl;
-    const RIM = solid(P.back[0] * rs, P.back[1] * rs, P.back[2] * rs);
-
-    const segs: [number, number, number, number, number][] = [];
-    let head: [number, number] = [0, 0];
-    if (g.mode !== 'gone') {
-      const legL = S * (0.42 - 0.13 * crouch), torso = S * (0.34 - 0.05 * crouch);
-      const lean = 0.2 + 0.45 * crouch;
-      const fx0 = x - ux * S * 0.17, fy0 = y - uy * S * 0.17, fx1 = x + ux * S * 0.15, fy1 = y + uy * S * 0.15;
-      const hx = x - ux * S * 0.02 + nx * legL, hy = y - uy * S * 0.02 + ny * legL;
-      const tx = nx * Math.cos(lean) + ux * Math.sin(lean), ty = ny * Math.cos(lean) + uy * Math.sin(lean);
-      const sx = hx + tx * torso, sy = hy + ty * torso;
-      head = [sx + tx * S * 0.13, sy + ty * S * 0.13];
-      const armA = 0.9 - crouch * 0.4;
-      segs.push([fx0, fy0, hx, hy, S * 0.11], [fx1, fy1, hx, hy, S * 0.11], [hx, hy, sx, sy, S * 0.14],
-        [sx, sy, sx + (ux * Math.cos(armA) - nx * Math.sin(armA) * 0.3) * S * 0.3, sy + (uy * Math.cos(armA) - ny * Math.sin(armA) * 0.3) * S * 0.3, S * 0.07],
-        [sx, sy, sx - ux * S * 0.26 + nx * S * 0.08, sy - uy * S * 0.26 + ny * S * 0.08, S * 0.07]);
-    }
-    // board
-    const bl = S * 0.5, bt = S * 0.07;
-    const bang = wipe ? b * 1.4 + 0.8 : b;
-    const bx = Math.cos(bang) * bl, by = (Math.sin(bang) * bl) / e, bo = (S * 0.02) / e;
-    sh.stroke(x - bx, y - by - bo, x + bx, y + by - bo, bt + rim, RIM);
-    for (const s of segs) sh.stroke(s[0], s[1], s[2], s[3], s[4] + rim, RIM);
-    if (segs.length) sh.disk(head[0], head[1], S * 0.1 + rim / 2, RIM, 12);
-    sh.stroke(x - bx, y - by - bo, x + bx, y + by - bo, bt, solid(0.9, 0.75, 0.5));
-    for (const s of segs) sh.stroke(s[0], s[1], s[2], s[3], s[4], INK);
-    if (segs.length) sh.disk(head[0], head[1], S * 0.1, INK, 12);
   }
 
   // ------------------------------------------------------------ particles
@@ -408,7 +380,7 @@ export class Renderer {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.W, this.H);
-    this.pComp.use().tex('u_scene', 0, this.scene.tex).tex('u_bloom', 1, this.bloom[0].tex)
+    this.pComp.use().tex('u_scene', 0, this.scene.tex).tex('u_bloom', 1, this.bloom[0].tex).tex('u_fg', 2, this.fg.tex)
       .f2('u_res', this.W, this.H).f1('u_time', this.t).f1('u_bloomAmt', 0.5).f1('u_exposure', 1).f1('u_ca', ca)
       .f4('u_shock', shock[0], shock[1], shock[2], shock[3]).f3('u_lift', 0.008, 0.012, 0.018).f1('u_sat', 1.08).f1('u_fade', fade);
     this.fullscreen();

@@ -38,12 +38,17 @@ void main(){
 // wave data every frame. We look at the face from the channel: the eye sits `u_hz` above the
 // water, `u_d0` away from the wave, so the flat sea around the wave is in perspective while the
 // wave itself is the gameplay plane (x along the wave, y up the wall).
-// Value noise from a mipmapped random texture: one fetch instead of four hashes, and the mips
-// filter out detail finer than a pixel (no shimmer on the distant sea).
+// Value noise from a random texture: one fetch instead of four hashes.
 const TEX_NOISE = `
 uniform sampler2D u_noise;
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-float vnoise(vec2 p){ return texture(u_noise, p * (1. / 256.)).r; }
+// smoothstep between texels with a single bilinear fetch (base level: derivatives aren't safe in
+// the branches this is called from, and the fine detail is faded out by distance where it matters)
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3. - 2. * f);
+  return textureLod(u_noise, (i + f + .5) * (1. / 256.), 0.).r;
+}
 float fbm(vec2 p){ return vnoise(p) * .5 + vnoise(p * 2.03 + vec2(17.1, 3.7)) * .25 + vnoise(p * 4.1 + vec2(5.3, 9.1)) * .125 + vnoise(p * 8.3 + vec2(1.7, 13.3)) * .0625; }
 `;
 
@@ -231,7 +236,7 @@ vec3 face(vec2 wp, vec2 uv, vec4 cd, float d){
   vec3 up = vec3(0., sin(th), -cos(th));
   float e = 3.;
   float h0 = ripple(wp), hx = ripple(wp + vec2(e, 0.)), hy = ripple(wp + vec2(0., e));
-  vec2 g = vec2(hx - h0, hy - h0) * (mix(2., 6., smoothstep(.1, .5, v)) / e);
+  vec2 g = vec2(hx - h0, hy - h0) * (mix(4.5, 6., smoothstep(.1, .5, v)) / e);
   n = normalize(n - vec3(g.x, 0., 0.) - up * g.y);
   vec3 V = normalize(vec3(0., (u_hz - wp.y) / u_d0, 1.));
   float q = 1. - max(dot(n, V), 0.);
@@ -250,6 +255,16 @@ vec3 face(vec2 wp, vec2 uv, vec4 cd, float d){
   // the hollow under a pitching lip is in its own shade
   float hollow = steep * smoothstep(.6, .8, v) * (1. - smoothstep(.86, .95, v));
   c *= 1. - .4 * hollow;
+  // low on the face: the water drawn up the wall carries lines of old foam
+  float low = 1. - smoothstep(.05, .55, v);
+  if (low > 0.) {
+    float wy = wp.y * .12 - u_time * .8;
+    float wl = vnoise(vec2(wp.x * .03 + vnoise(vec2(wp.x * .01, wy * .25)) * 1.5, wy));
+    float line = smoothstep(.93, .99, 1. - abs(wl * 2. - 1.)) * smoothstep(.3, .6, vnoise(vec2(wp.x * .05, wy * .5)));
+    c = mix(c, foamCol(wp, .7), line * .14 * low);
+    // the trough is the deepest, darkest water under the wall
+    c *= 1. - .25 * smoothstep(.35, .0, v) * (1. - smoothstep(0., .06, v));
+  }
   // thin backlit rim along the crest
   c += transmit(.25) * u_back * exp(-(H - wp.y) / (H * .02)) * mix(.4, 1.2, steep);
   // white mane: feathering near the break, thick and pulsing on a closeout
@@ -426,6 +441,7 @@ ${NOISE}
 in vec2 v_uv;
 uniform sampler2D u_scene;
 uniform sampler2D u_bloom;
+uniform sampler2D u_fg;       // the surfer layer (premultiplied), laid over the bloom
 uniform vec2 u_res;
 uniform float u_time;
 uniform float u_bloomAmt;
@@ -448,6 +464,8 @@ void main(){
   vec2 cd = (uv - .5) * (u_ca + k * .02);
   vec3 c = vec3(texture(u_scene, uv + cd).r, texture(u_scene, uv).g, texture(u_scene, uv - cd).b);
   c = safe(c) + safe(texture(u_bloom, uv).rgb) * u_bloomAmt;
+  vec4 fg = texture(u_fg, uv);
+  c = c * (1. - fg.a) + safe(fg.rgb);
   c *= u_exposure;
   c = aces(c);
   float l = dot(c, vec3(.2126, .7152, .0722));
