@@ -6,7 +6,7 @@ import { BAL } from './balance';
 import { makeRng, type Rng } from '../core/rng';
 import { clamp, smoothstep } from '../core/math';
 
-export type SectionKind = 'open' | 'flat' | 'close';
+export type SectionKind = 'open' | 'flat' | 'close' | 'steep' | 'tube';
 export type Section = { kind: SectionKind; x0: number; x1: number; H: number; vb: number; power: number };
 
 const AHEAD = 9000; // generate this far ahead of the break
@@ -48,10 +48,20 @@ export class Wave {
       for (let i = this.sections.length - 1; i >= 0; i--) {
         if (this.sections[i].kind === 'close') { sinceClose = this.genX - this.sections[i].x1; break; }
       }
-      const wOpen = W.open.weight, wFlat = prev?.kind === 'flat' ? 0 : W.flat.weight;
-      const wClose = sinceClose < W.closeGap ? 0 : W.close.weight * (1 + d * W.closeRamp);
-      const p = r() * (wOpen + wFlat + wClose);
-      kind = p < wOpen ? 'open' : p < wOpen + wFlat ? 'flat' : 'close';
+      // never the same special section twice in a row
+      const same = (k: SectionKind) => prev?.kind === k;
+      const picks: [SectionKind, number][] = [
+        ['open', W.open.weight],
+        ['flat', same('flat') ? 0 : W.flat.weight],
+        ['close', sinceClose < W.closeGap ? 0 : W.close.weight * (1 + d * W.closeRamp)],
+        ['steep', same('steep') ? 0 : W.steep.weight],
+        ['tube', same('tube') || same('close') ? 0 : W.tube.weight],
+      ];
+      let p = r() * picks.reduce((a, q) => a + q[1], 0);
+      for (const [k, w] of picks) {
+        kind = k;
+        if ((p -= w) < 0) break;
+      }
     }
     const k = W[kind];
     const len = r.range(k.len[0], k.len[1]);
@@ -122,6 +132,18 @@ export class Wave {
   /** 0..1, how much x belongs to a section of this kind (blended at the joins; for visuals). */
   kindAt(x: number, kind: SectionKind) {
     return this.blended(x, (s) => (s.kind === kind ? 1 : 0));
+  }
+
+  /** 0..1: how far x is inside the barrel (the lip thrown over the wall ahead of the break on a
+   *  tube section); 0 outside it. Ramps up over `tube.mouth` wall heights from the barrel's front. */
+  barrel(x: number) {
+    const T = BAL.tube;
+    const d = x - this.xb;
+    if (d < 0) return 0;
+    const H = this.H(x);
+    const k = this.kindAt(x, 'tube');
+    if (k <= 0) return 0;
+    return k * smoothstep(T.reach * H, (T.reach - T.mouth) * H, d);
   }
 
   /** Is x inside foam (behind the break)? */

@@ -3,6 +3,7 @@
 
 import { BAL, DEG } from '../game/balance';
 import type { Game } from '../game/game';
+import type { Thing } from '../game/things';
 import type { Rng } from '../core/rng';
 import { lerp } from '../core/math';
 
@@ -22,6 +23,8 @@ export class Bot {
   private armDive = false;
   private armAt = 0;
   private wasWipe = false;
+  /** obstacles this player has spotted (or missed) — decided once per obstacle */
+  private seen = new Map<Thing, boolean>();
 
   constructor(readonly skill: number, private rng: Rng) {
     this.react = lerp(0.3, 0.14, skill); // human-like: ~0.3 s for a beginner, ~0.14 s for a sharp player
@@ -48,15 +51,41 @@ export class Bot {
     const sloppy = (1 - this.skill) * 0.25;
 
     if (g.mode === 'ride') {
-      const h = g.y / g.wave.H(g.x);
-      if (this.held && h < this.lo + (this.rng() - 0.5) * sloppy) {
+      const H = g.wave.H(g.x);
+      const h = g.y / H;
+      let lo = this.lo, hi = this.hi, calm = true;
+      // an obstacle coming up: pass above what sits low, below what sits high
+      const ob = g.obstacleAhead(lerp(0.6, 1.2, this.skill) * BAL.tempo);
+      if (ob && this.spotted(ob)) {
+        const T = BAL.things;
+        const oh = ob.y / g.wave.H(ob.x), rr = (T.r[ob.kind as keyof typeof T.r] + T.surferR) / H + 0.05;
+        if (oh < 0.45) lo = Math.max(lo, oh + rr);
+        else hi = Math.min(hi, oh - rr);
+        calm = false;
+      }
+      // in (or about to enter) a barrel: stay under the lip, out of the foam
+      const B = BAL.tube;
+      if (g.wave.kindAt(g.x, 'tube') > 0 || g.wave.kindAt(g.x + g.vxNow * lerp(0.5, 1, this.skill) * BAL.tempo, 'tube') > 0) {
+        hi = Math.min(hi, B.hi - lerp(0.12, 0.04, this.skill));
+        lo = Math.max(lo, B.lo + 0.04);
+        calm = false;
+      }
+      if (hi < lo + 0.12) hi = lo + 0.12;
+      // with something to avoid, a player reads the climb and turns early (reaction included)
+      if (!calm) {
+        const vy = g.v * Math.sin(g.th) / H;
+        if (vy > 0) hi -= vy * this.react * lerp(0.6, 1, this.skill);
+        else lo -= vy * this.react * lerp(0.6, 1, this.skill);
+      }
+      if (!calm) this.goAir = false;
+      if (this.held && h < lo + (this.rng() - 0.5) * sloppy) {
         this.held = false;
         // now and then ride all the way up and launch off the lip for a trick
         // (a player who has noticed a closeout coming keeps pumping instead)
         const closeout = g.closeAhead(3 * BAL.tempo) !== null || g.wave.sectionAt(g.x).kind === 'close';
         const careful = closeout && this.rng() < this.skill;
-        this.goAir = !careful && g.v > 280 && this.rng() < 0.12 + 0.3 * this.skill;
-      } else if (!this.held && h > (this.goAir ? 0.97 : this.hi + (this.rng() - 0.5) * sloppy)) this.held = true;
+        this.goAir = calm && !careful && g.v > 280 && this.rng() < 0.12 + 0.3 * this.skill;
+      } else if (!this.held && h > (this.goAir ? 0.97 : hi + (this.rng() - 0.5) * sloppy)) this.held = true;
     } else if (air) {
       // spin until the planned rotation, then (a decent player) press again just before touchdown
       // to carry the landing into a dive
@@ -71,6 +100,17 @@ export class Bot {
       this.held = false;
     }
     return this.held;
+  }
+
+  /** Does this player notice the obstacle in time? (decided once per obstacle) */
+  private spotted(t: Thing) {
+    let s = this.seen.get(t);
+    if (s === undefined) {
+      s = this.rng() < 0.55 + 0.43 * this.skill;
+      this.seen.set(t, s);
+      if (this.seen.size > 64) this.seen.delete(this.seen.keys().next().value!);
+    }
+    return s;
   }
 
   /** At take-off: decide how many full turns to try and when to stop spinning. */

@@ -24,6 +24,7 @@ if (process.env.BAL) tuneBal(JSON.parse(process.env.BAL));
 type Ride = {
   skill: number; time: number; meters: number; score: number; wipes: number; airs: number; tricks: number; perfects: number;
   lead: number; speed: number; air: number; scrapes: number; window: number; cycle: number; night: boolean; closeDeath: boolean; wipeDeath: boolean; closes: number; closesPassed: number;
+  causes: Record<string, number>; tubeT: number; tubes: number; shells: number; dolphins: number; pelicans: number; stings: number;
 };
 
 /** Degenerate inputs that must never beat real pumping (exploit guard). */
@@ -39,16 +40,17 @@ function ride(seed: number, skill: number, trace = false, policy?: (t: number) =
   const bot = new Bot(skill, makeRng(seed ^ 0xb07));
   const input = () => (policy ? policy(g.time / BAL.tempo) : bot.step(g, DT));
   const tempo = BAL.tempo;
-  let lastWipe = -99, airT = 0, launch = 0, t13 = 0, lastDive = 0;
+  let lastWipe = -99, airT = 0, launch = -1, t13 = 0, lastDive = 0;
+  const causes: Record<string, number> = {};
   const wins: number[] = [], cycles: number[] = [];
   let prevHeld = false;
   let closes = 0, closesPassed = 0, inClose = false, sec = 0;
   for (let t = 0; t < LIMIT * tempo; t += DT) {
     g.update(DT, input());
     for (const e of g.events) {
-      if (e.t === 'wipe') lastWipe = g.time;
+      if (e.t === 'wipe') { lastWipe = g.time; causes[e.cause] = (causes[e.cause] ?? 0) + 1; }
       if (e.t === 'launch') launch = g.time;
-      if (e.t === 'land' || e.t === 'wipe') airT += g.time - launch;
+      if ((e.t === 'land' || e.t === 'wipe') && launch >= 0) { airT += g.time - launch; launch = -1; }
     }
     g.events.length = 0;
     if (g.mode === 'ride') {
@@ -78,6 +80,7 @@ function ride(seed: number, skill: number, trace = false, policy?: (t: number) =
     lead: g.leadSum / Math.max(g.time, 1e-6), speed: (g.x - g.x0) / Math.max(g.time, 1e-6), air: airT / Math.max(1, g.airs) / tempo, scrapes: g.scrapes / Math.max(time, 1) * 60,
     window: med(wins) / tempo, cycle: med(cycles.filter((c) => c < 5)) / tempo,
     night: time > 240, closeDeath: g.mode === 'gone' && (bs.kind === 'close' || inClose), wipeDeath: g.mode === 'gone' && g.time - lastWipe < 3, closes, closesPassed,
+    causes, tubeT: g.tubeTotal / tempo, tubes: g.tubes, shells: g.shells, dolphins: g.dolphins, pelicans: g.pelicans, stings: g.stings,
   };
 }
 
@@ -98,6 +101,13 @@ function report(label: string, rs: Ride[]) {
       `  | wipes ${f(mean(rs.map((r) => r.wipes)), 1)} airs ${f(mean(rs.map((r) => r.airs)), 0)} (${f(mean(rs.filter((r) => r.airs).map((r) => r.air)), 2)}s) tricks ${f(mean(rs.map((r) => r.tricks)), 1)} perf ${f(mean(rs.map((r) => r.perfects)), 1)}` +
       `  | deaths: close ${f((100 * cD) / rs.length)}% after-wipe ${f((100 * wD) / rs.length)}%` +
       `  | closeouts ${f(mean(rs.map((r) => r.closesPassed)), 1)}/${f(mean(rs.map((r) => r.closes)), 1)}`,
+  );
+  const causes: Record<string, number> = {};
+  for (const r of rs) for (const [k, v] of Object.entries(r.causes)) causes[k] = (causes[k] ?? 0) + v / rs.length;
+  console.log(
+    `${''.padEnd(10)} wipe causes: ${Object.entries(causes).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${f(v, 1)}`).join(', ') || '—'}` +
+      `  | tube ${f(mean(rs.map((r) => r.tubeT)), 1)}s exits ${f(mean(rs.map((r) => r.tubes)), 1)}  | shells ${f(mean(rs.map((r) => r.shells)), 0)}` +
+      `  dolphins ${f(mean(rs.map((r) => r.dolphins)), 1)} pelicans ${f(mean(rs.map((r) => r.pelicans)), 1)} stings ${f(mean(rs.map((r) => r.stings)), 1)}`,
   );
 }
 

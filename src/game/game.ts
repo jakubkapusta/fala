@@ -3,20 +3,29 @@
 
 import { BAL, DEG } from './balance';
 import { Wave } from './wave';
+import { Things, type ThingKind } from './things';
 import { clamp, smoothstep, wrapAngle } from '../core/math';
 
 export type Mode = 'ride' | 'air' | 'wipe' | 'gone';
 export type LandQ = 'perfect' | 'clean';
+export type WipeCause = 'land' | 'lip' | ThingKind;
 export type GameEvent =
   | { t: 'launch' }
   | { t: 'land'; q: LandQ; halfTurns: number; pts: number; mult: number; trick: boolean }
-  | { t: 'wipe' }
+  | { t: 'wipe'; cause: WipeCause }
+  | { t: 'sting' }
+  | { t: 'shell'; n: number }
+  | { t: 'dolphin' }
+  | { t: 'pelican'; pts: number }
+  | { t: 'tubeIn' }
+  | { t: 'tubeOut'; secs: number; pts: number }
   | { t: 'recover' }
   | { t: 'scrape' }
   | { t: 'gone' };
 
 export class Game {
   wave: Wave;
+  things: Things;
   mode: Mode = 'ride';
   modeT = 0;
   time = 0;
@@ -61,6 +70,17 @@ export class Game {
   tricks = 0;
   bestHalfTurns = 0;
   leadSum = 0;
+  shells = 0;
+  stings = 0;
+  dolphins = 0;
+  pelicans = 0;
+  /** in the barrel right now, game s spent in it this time, total, exits that counted */
+  inTube = false;
+  tubeT = 0;
+  tubeTotal = 0;
+  tubes = 0;
+  private tubeAcc = 0;
+  lastWipe: WipeCause | null = null;
   /** remaining slow motion (game s); main.ts scales time while it runs */
   slowT = 0;
   events: GameEvent[] = [];
@@ -68,6 +88,7 @@ export class Game {
 
   constructor(readonly seed: number) {
     this.wave = new Wave(seed);
+    this.things = new Things(seed);
     const H = this.wave.H(0);
     this.x = this.x0 = BAL.start.lead * H;
     this.y = BAL.start.y * H;
@@ -102,6 +123,9 @@ export class Game {
     else if (this.mode === 'wipe') this.tumble(dt);
 
     const w = this.wave;
+    this.things.update(dt, w, this.x, this.lead);
+    this.touch(dt);
+    this.tube(dt);
     this.leadSum += this.lead * dt;
     if (this.x < w.xb - BAL.swallow * w.H(w.xb)) {
       this.mode = 'gone';
@@ -286,15 +310,18 @@ export class Game {
   }
 
   // ------------------------------------------------------------ wipeout
-  private wipeout() {
+  private wipeout(cause: WipeCause = 'land') {
     const W = BAL.wipe;
+    if (this.mode === 'air') this.launchV = Math.max(this.launchV, this.v);
+    else this.launchV = this.v;
+    this.lastWipe = cause;
     this.mode = 'wipe';
     this.modeT = 0;
     this.v = this.launchV * W.keep;
     this.th = 0;
     this.mult = 1;
     this.wipes++;
-    this.events.push({ t: 'wipe' });
+    this.events.push({ t: 'wipe', cause });
   }
 
   private tumble(dt: number) {
@@ -311,6 +338,107 @@ export class Game {
       this.v = Math.max(this.v, S.minSpeed);
       this.events.push({ t: 'recover' });
     }
+  }
+
+  // ------------------------------------------------------------ things and the barrel
+  /** Collisions with obstacles, helpers and shells. */
+  private touch(dt: number) {
+    if (this.mode === 'gone') return;
+    const T = BAL.things, w = this.wave;
+    for (const t of this.things.list) {
+      if (t.done) continue;
+      const dx = t.x - this.x;
+      if (t.kind === 'dolphin') {
+        // riding alongside a dolphin: it pushes the surfer on
+        const R = T.dolphinRange * w.H(this.x);
+        if (this.mode === 'ride' && Math.abs(dx) < R && Math.abs(t.y - this.y) < R) {
+          if (t.used === 0) { this.dolphins++; this.events.push({ t: 'dolphin' }); }
+          t.used += dt;
+          this.v = Math.min(BAL.surf.maxSpeed, this.v + T.dolphinPush * dt);
+          if (t.used >= T.dolphinTime) t.done = true;
+        }
+        continue;
+      }
+      const r = T.surferR + T.r[t.kind as keyof typeof T.r];
+      if (Math.abs(dx) > r) continue;
+      if (dx * dx + (t.y - this.y) * (t.y - this.y) > r * r) continue;
+      switch (t.kind) {
+        case 'shell':
+          if (this.mode === 'wipe') break;
+          t.done = true;
+          this.shells++;
+          this.events.push({ t: 'shell', n: this.shells });
+          break;
+        case 'pelican':
+          if (this.mode !== 'air') break;
+          // bounce off the bird: a second launch
+          t.done = true;
+          this.vy = Math.max(this.vy, T.pelicanVy);
+          this.pelicans++;
+          this.trickPts += T.pelicanPts * this.mult;
+          this.events.push({ t: 'pelican', pts: T.pelicanPts * this.mult });
+          break;
+        case 'jelly':
+          if (this.mode !== 'ride') break;
+          t.done = true;
+          this.v = Math.max(BAL.surf.minSpeed, this.v * T.stingKeep);
+          this.stings++;
+          this.events.push({ t: 'sting' });
+          break;
+        default:
+          if (this.mode !== 'ride' && this.mode !== 'air') break;
+          t.done = true;
+          this.wipeout(t.kind);
+      }
+      if ((this.mode as Mode) === 'wipe') break;
+    }
+  }
+
+  /** The barrel: a band to hold, points while inside, a bonus for riding out of it. */
+  private tube(dt: number) {
+    const T = BAL.tube, w = this.wave;
+    const b = this.mode === 'ride' ? w.barrel(this.x) : 0;
+    // the lip comes down gradually from the barrel's mouth: a surfer caught high has time to drop
+    if (b > 0 && this.y / w.H(this.x) > this.ceiling(this.x) + T.hitMargin) {
+      this.inTube = false;
+      this.tubeT = 0;
+      this.wipeout('lip');
+      return;
+    }
+    const inside = b > 0.5;
+    if (inside) {
+      if (!this.inTube) this.events.push({ t: 'tubeIn' });
+      this.inTube = true;
+      this.tubeT += dt;
+      this.tubeTotal += dt;
+      this.tubeAcc += T.ptsPerSec * this.mult * dt;
+      const whole = Math.floor(this.tubeAcc);
+      this.trickPts += whole;
+      this.tubeAcc -= whole;
+      if (this.y / w.H(this.x) < T.lo) this.v = Math.max(BAL.surf.minSpeed, this.v - T.foamDrag * this.v * dt);
+      return;
+    }
+    if (this.inTube) {
+      this.inTube = false;
+      if (this.mode === 'ride' && this.tubeT >= T.minTime && this.x > w.xb) {
+        const pts = T.exit * this.mult;
+        this.trickPts += pts;
+        this.tubes++;
+        this.mult = Math.min(BAL.score.multMax, this.mult + 1);
+        this.events.push({ t: 'tubeOut', secs: this.tubeT, pts });
+      }
+      this.tubeT = 0;
+    }
+  }
+
+  /** Lower edge of the lip at x as a share of the wall (1.1 = no lip). */
+  ceiling(x: number) {
+    return 1.1 + (BAL.tube.hi - 1.1) * this.wave.barrel(x);
+  }
+
+  /** The nearest obstacle within `within` game seconds ahead (by current speed). */
+  obstacleAhead(within: number) {
+    return this.things.obstacleAhead(this.x, within * Math.max(this.vxNow, 200));
   }
 
   /** Game seconds until the surfer reaches the next closeout (null if none soon or already inside). */

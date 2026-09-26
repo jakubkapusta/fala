@@ -17,6 +17,10 @@ export const BAL = {
     open: { H: [200, 250], len: [1400, 2600], vb: 300, power: 1, weight: 6 },
     flat: { H: [130, 160], len: [900, 1500], vb: 245, power: 0.55, weight: 2 },
     close: { H: [210, 270], len: [420, 700], vb: 480, power: 1.15, weight: 1.6 },
+    /** tall, steep, lots of power: big airs */
+    steep: { H: [250, 300], len: [900, 1600], vb: 320, power: 1.3, weight: 1.5 },
+    /** the lip throws over the wall ahead of the break: a barrel (see `tube`) */
+    tube: { H: [230, 280], len: [800, 1300], vb: 320, power: 1.2, weight: 1.3 },
     /** units over which height / breaking speed blend at a section boundary */
     blend: 160,
     /** open sections at the start before anything else can appear */
@@ -111,6 +115,48 @@ export const BAL = {
   },
 
   wipe: { keep: 0.45, time: 1.0, sink: 0.55 },
+
+  /** the barrel on tube sections: the lip covers the wall from the break up to `reach` wall heights
+   *  ahead of it; the open band inside is y/H ∈ [lo, hi]. Above hi + hitMargin the lip knocks the
+   *  surfer off (wipeout), below lo the foam drags (per second). Points per game second inside ×mult,
+   *  a bonus for riding out of it after at least `minTime` game s (and +1 multiplier). */
+  tube: { reach: 3.2, lo: 0.1, hi: 0.66, hitMargin: 0.08, foamDrag: 1.2, mouth: 0.6, ptsPerSec: 120, exit: 400, minTime: 0.8 },
+
+  /** things on the wave. Densities per 1000 units of wall, from difficulty 0 to 1. */
+  things: {
+    obstacles: [0.14, 0.7] as [number, number],
+    /** relative picks: rocks at the bottom, logs / buoys high on the wall, another surfer, jellyfish */
+    mix: { rock: 3, log: 2, buoy: 1.5, rider: 1, jelly: 2 },
+    helpers: [0.16, 0.06] as [number, number],
+    helperMix: { dolphin: 2, pelican: 1 },
+    /** extra helpers when the player is struggling (lead below `lowLead` H): one per `struggleGap` units */
+    lowLead: 1.4,
+    struggleGap: 2500,
+    /** no obstacles within this many units of a section's ends, none at all in the first `clear` units */
+    margin: 250,
+    clear: 4000,
+    /** hit radii (units): the surfer, then each kind */
+    surferR: 12,
+    r: { rock: 26, log: 18, buoy: 15, rider: 18, jelly: 12, pelican: 30, shell: 22 },
+    /** rider: horizontal speed ×vb of its section, height band (y/H) either low or high */
+    riderSpeed: 0.85,
+    riderLow: 0.25,
+    riderHigh: 0.7,
+    /** jellyfish sting: speed ×keep */
+    stingKeep: 0.8,
+    /** dolphin: swims at the surfer's pace; riding within `range` wall heights of it pushes (units/s²) */
+    dolphinSpeed: 360,
+    dolphinRange: 0.5,
+    dolphinPush: 260,
+    dolphinTime: 3,
+    /** pelican hit in the air: vertical speed at least `pelicanVy`, and points */
+    pelicanVy: 380,
+    pelicanPts: 150,
+    /** shells per group, groups per section */
+    shellCount: [6, 11] as [number, number],
+    shellGroups: [1, 2] as [number, number],
+    shellGap: 42,
+  },
 
   /** swallowed when x < break − swallow·H */
   swallow: 0.15,
